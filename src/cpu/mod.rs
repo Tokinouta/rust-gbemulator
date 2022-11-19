@@ -314,4 +314,81 @@ impl Cpu {
         self.register.set_sp(self.register.get_sp() - 2)
     }
 
+    pub fn add8(&mut self, b: u8) {
+        let a = self.register.get_a();
+        let res = a.wrapping_add(b);
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z }
+            | !Flag::N
+            | if (a as u16) + (b as u16) > 0x00ff {
+                Flag::C
+            } else {
+                !Flag::C
+            }
+            | if (a & 0x0f) + (b & 0x0f) > 0x0f {
+                Flag::H
+            } else {
+                !Flag::H
+            };
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
+
+    pub fn adc8(&mut self, b: u8) {
+        let a = self.register.get_a();
+        let carry = u8::from(self.register.get_flag(Flag::C));
+        let res = a.wrapping_add(b).wrapping_sub(carry);
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z }
+            | !Flag::N
+            | if (a as u16) + (b as u16) + (carry as u16) > 0x00ff {
+                Flag::C
+            } else {
+                !Flag::C
+            }
+            | if (a & 0x0f) + (b & 0x0f) + carry > 0x0f {
+                Flag::H
+            } else {
+                !Flag::H
+            };
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
+
+    pub fn sub8(&mut self, b: u8) {
+        let a = self.register.get_a();
+        let res = a.wrapping_sub(b);
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z }
+            | !Flag::N
+            | if (a as u16) < (b as u16) {
+                Flag::C
+            } else {
+                !Flag::C
+            }
+            | if (a & 0x0f) < (b & 0x0f) {
+                Flag::H
+            } else {
+                !Flag::H
+            };
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
+
+    pub fn sbc8(&mut self, b: u8) {
+        let a = self.register.get_a();
+        let carry = u8::from(self.register.get_flag(Flag::C));
+        let res = a.wrapping_sub(b).wrapping_sub(carry);
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z }
+            | !Flag::N
+            | if (a as u16) < ((b + carry) as u16) {
+                Flag::C
+            } else {
+                !Flag::C
+            }
+            | if (a & 0x0f) < ((b + carry) & 0x0f) {
+                Flag::H
+            } else {
+                !Flag::H
+            };
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
 }

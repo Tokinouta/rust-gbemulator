@@ -28,12 +28,17 @@ impl Register {
         Self { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, h: 0, l: 0, pc: 0x100, sp: 0xfffe }
     }
 
-    pub fn get_flag(&self) -> Flag {
-        Flag::from_bits_truncate(self.f)
+    pub fn get_flag(&self, flag: Flag) -> bool {
+        self.f & flag.bits > 0
     }
 
     pub fn set_flag(&mut self, flag: Flag) {
         self.f |= flag.bits;
+        // if value {
+        //     self.f |= flag.bits;
+        // } else {
+        //     self.f &= !flag.bits;
+        // }
     }
 }
 
