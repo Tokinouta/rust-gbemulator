@@ -284,26 +284,7 @@ impl Cpu {
             0xe5 => self.push(self.register.get_hl()),
 
             // POP nn
-            0xf1 => {
-                self.register
-                    .set_af(self.memory.get16(self.register.get_sp()));
-                self.register.set_sp(self.register.get_sp() + 2)
-            }
-            0xc1 => {
-                self.register
-                    .set_bc(self.memory.get16(self.register.get_sp()));
-                self.register.set_sp(self.register.get_sp() + 2)
-            }
-            0xd1 => {
-                self.register
-                    .set_de(self.memory.get16(self.register.get_sp()));
-                self.register.set_sp(self.register.get_sp() + 2)
-            }
-            0xe1 => {
-                self.register
-                    .set_hl(self.memory.get16(self.register.get_sp()));
-                self.register.set_sp(self.register.get_sp() + 2)
-            }
+            0xf1 | 0xc1 | 0xd1 | 0xe1 => self.pop(opcode),
 
             // ADD A,n
             0x87 => self.add8(self.register.get_a()),
@@ -317,7 +298,7 @@ impl Cpu {
             0xc6 => {
                 let n = self.imm8();
                 self.add8(n)
-            },
+            }
 
             // ADC A,n
             0x8f => self.adc8(self.register.get_a()),
@@ -331,7 +312,7 @@ impl Cpu {
             0xce => {
                 let n = self.imm8();
                 self.adc8(n)
-            },
+            }
 
             // SUB A,n
             0x97 => self.sub8(self.register.get_a()),
@@ -345,7 +326,7 @@ impl Cpu {
             0xd6 => {
                 let n = self.imm8();
                 self.sub8(n)
-            },
+            }
 
             // SBC A,n
             0x9f => self.sbc8(self.register.get_a()),
@@ -359,7 +340,7 @@ impl Cpu {
             0xde => {
                 let n = self.imm8();
                 self.sbc8(n)
-            },
+            }
 
             // AND A,n
             0xa7 => self.and8(self.register.get_a()),
@@ -373,7 +354,7 @@ impl Cpu {
             0xe6 => {
                 let n = self.imm8();
                 self.and8(n)
-            },
+            }
 
             // OR A,n
             0xb7 => self.or8(self.register.get_a()),
@@ -387,7 +368,7 @@ impl Cpu {
             0xf6 => {
                 let n = self.imm8();
                 self.or8(n)
-            },
+            }
 
             // XOR A,n
             0xaf => self.xor8(self.register.get_a()),
@@ -401,7 +382,7 @@ impl Cpu {
             0xee => {
                 let n = self.imm8();
                 self.xor8(n)
-            },
+            }
 
             // CP A,n
             0xbf => self.cp8(self.register.get_a()),
@@ -415,7 +396,7 @@ impl Cpu {
             0xfe => {
                 let n = self.imm8();
                 self.cp8(n)
-            },
+            }
 
             _ => (),
         }
@@ -425,6 +406,18 @@ impl Cpu {
     pub fn push(&mut self, n: u16) {
         self.memory.set16(self.register.get_sp(), n);
         self.register.set_sp(self.register.get_sp() - 2)
+    }
+
+    pub fn pop(&mut self, opcode: u8) {
+        let address = self.memory.get16(self.register.get_sp());
+        match opcode {
+            0xf1 => self.register.set_af(address),
+            0xc1 => self.register.set_bc(address),
+            0xd1 => self.register.set_de(address),
+            0xe1 => self.register.set_hl(address),
+            _ => (),
+        }
+        self.register.set_sp(self.register.get_sp() + 2);
     }
 
     pub fn add8(&mut self, n: u8) {
@@ -546,4 +539,93 @@ impl Cpu {
         self.register.set_flag(flag);
     }
 
+    pub fn inc8(&mut self, opcode: u8) {
+        let mut temp = 0;
+        match opcode {
+            0x3c => {
+                self.register.set_a(self.register.get_a().wrapping_add(1));
+                temp = self.register.get_a();
+            }
+            0x04 => {
+                self.register.set_b(self.register.get_b().wrapping_add(1));
+                temp = self.register.get_b();
+            }
+            0x0c => {
+                self.register.set_c(self.register.get_c().wrapping_add(1));
+                temp = self.register.get_c();
+            }
+            0x14 => {
+                self.register.set_d(self.register.get_d().wrapping_add(1));
+                temp = self.register.get_d();
+            }
+            0x1c => {
+                self.register.set_e(self.register.get_e().wrapping_add(1));
+                temp = self.register.get_e();
+            }
+            0x24 => {
+                self.register.set_h(self.register.get_h().wrapping_add(1));
+                temp = self.register.get_h();
+            }
+            0x2c => {
+                self.register.set_l(self.register.get_l().wrapping_add(1));
+                temp = self.register.get_l();
+            }
+            0x34 => {
+                let address = self.register.get_hl();
+                let new_value = self.memory.get8(address).wrapping_add(1);
+                self.memory.set8(address, new_value);
+                temp = new_value;
+            }
+            _ => (),
+        }
+        let flag = if temp == 0 { Flag::Z } else { !Flag::Z }
+            | !Flag::N
+            | if temp & 0x0f == 0 { Flag::H } else { !Flag::H };
+        self.register.set_flag(flag)
+    }
+
+    pub fn dec8(&mut self, opcode: u8) {
+        let mut temp = 0;
+        match opcode {
+            0x3c => {
+                self.register.set_a(self.register.get_a().wrapping_sub(1));
+                temp = self.register.get_a();
+            }
+            0x04 => {
+                self.register.set_b(self.register.get_b().wrapping_sub(1));
+                temp = self.register.get_b();
+            }
+            0x0c => {
+                self.register.set_c(self.register.get_c().wrapping_sub(1));
+                temp = self.register.get_c();
+            }
+            0x14 => {
+                self.register.set_d(self.register.get_d().wrapping_sub(1));
+                temp = self.register.get_d();
+            }
+            0x1c => {
+                self.register.set_e(self.register.get_e().wrapping_sub(1));
+                temp = self.register.get_e();
+            }
+            0x24 => {
+                self.register.set_h(self.register.get_h().wrapping_sub(1));
+                temp = self.register.get_h();
+            }
+            0x2c => {
+                self.register.set_l(self.register.get_l().wrapping_sub(1));
+                temp = self.register.get_l();
+            }
+            0x34 => {
+                let address = self.register.get_hl();
+                let new_value = self.memory.get8(address).wrapping_sub(1);
+                self.memory.set8(address, new_value);
+                temp = new_value;
+            }
+            _ => (),
+        }
+        let flag = if temp == 0 { Flag::Z } else { !Flag::Z }
+            | Flag::N
+            | if temp & 0x0f == 0x0f { Flag::H } else { !Flag::H };
+        self.register.set_flag(flag)
+    }
 }
