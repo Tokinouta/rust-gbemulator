@@ -304,6 +304,119 @@ impl Cpu {
                     .set_hl(self.memory.get16(self.register.get_sp()));
                 self.register.set_sp(self.register.get_sp() + 2)
             }
+
+            // ADD A,n
+            0x87 => self.add8(self.register.get_a()),
+            0x80 => self.add8(self.register.get_b()),
+            0x81 => self.add8(self.register.get_c()),
+            0x82 => self.add8(self.register.get_d()),
+            0x83 => self.add8(self.register.get_e()),
+            0x84 => self.add8(self.register.get_h()),
+            0x85 => self.add8(self.register.get_l()),
+            0x86 => self.add8(self.memory.get8(self.register.get_hl())),
+            0xc6 => {
+                let n = self.imm8();
+                self.add8(n)
+            },
+
+            // ADC A,n
+            0x8f => self.adc8(self.register.get_a()),
+            0x88 => self.adc8(self.register.get_b()),
+            0x89 => self.adc8(self.register.get_c()),
+            0x8a => self.adc8(self.register.get_d()),
+            0x8b => self.adc8(self.register.get_e()),
+            0x8c => self.adc8(self.register.get_h()),
+            0x8d => self.adc8(self.register.get_l()),
+            0x8e => self.adc8(self.memory.get8(self.register.get_hl())),
+            0xce => {
+                let n = self.imm8();
+                self.adc8(n)
+            },
+
+            // SUB A,n
+            0x97 => self.sub8(self.register.get_a()),
+            0x90 => self.sub8(self.register.get_b()),
+            0x91 => self.sub8(self.register.get_c()),
+            0x92 => self.sub8(self.register.get_d()),
+            0x93 => self.sub8(self.register.get_e()),
+            0x94 => self.sub8(self.register.get_h()),
+            0x95 => self.sub8(self.register.get_l()),
+            0x96 => self.sub8(self.memory.get8(self.register.get_hl())),
+            0xd6 => {
+                let n = self.imm8();
+                self.sub8(n)
+            },
+
+            // SBC A,n
+            0x9f => self.sbc8(self.register.get_a()),
+            0x98 => self.sbc8(self.register.get_b()),
+            0x99 => self.sbc8(self.register.get_c()),
+            0x9a => self.sbc8(self.register.get_d()),
+            0x9b => self.sbc8(self.register.get_e()),
+            0x9c => self.sbc8(self.register.get_h()),
+            0x9d => self.sbc8(self.register.get_l()),
+            0x9e => self.sbc8(self.memory.get8(self.register.get_hl())),
+            0xde => {
+                let n = self.imm8();
+                self.sbc8(n)
+            },
+
+            // AND A,n
+            0xa7 => self.and8(self.register.get_a()),
+            0xa0 => self.and8(self.register.get_b()),
+            0xa1 => self.and8(self.register.get_c()),
+            0xa2 => self.and8(self.register.get_d()),
+            0xa3 => self.and8(self.register.get_e()),
+            0xa4 => self.and8(self.register.get_h()),
+            0xa5 => self.and8(self.register.get_l()),
+            0xa6 => self.and8(self.memory.get8(self.register.get_hl())),
+            0xe6 => {
+                let n = self.imm8();
+                self.and8(n)
+            },
+
+            // OR A,n
+            0xb7 => self.or8(self.register.get_a()),
+            0xb0 => self.or8(self.register.get_b()),
+            0xb1 => self.or8(self.register.get_c()),
+            0xb2 => self.or8(self.register.get_d()),
+            0xb3 => self.or8(self.register.get_e()),
+            0xb4 => self.or8(self.register.get_h()),
+            0xb5 => self.or8(self.register.get_l()),
+            0xb6 => self.or8(self.memory.get8(self.register.get_hl())),
+            0xf6 => {
+                let n = self.imm8();
+                self.or8(n)
+            },
+
+            // XOR A,n
+            0xaf => self.xor8(self.register.get_a()),
+            0xa8 => self.xor8(self.register.get_b()),
+            0xa9 => self.xor8(self.register.get_c()),
+            0xaa => self.xor8(self.register.get_d()),
+            0xab => self.xor8(self.register.get_e()),
+            0xac => self.xor8(self.register.get_h()),
+            0xad => self.xor8(self.register.get_l()),
+            0xae => self.xor8(self.memory.get8(self.register.get_hl())),
+            0xee => {
+                let n = self.imm8();
+                self.xor8(n)
+            },
+
+            // CP A,n
+            0xbf => self.cp8(self.register.get_a()),
+            0xb8 => self.cp8(self.register.get_b()),
+            0xb9 => self.cp8(self.register.get_c()),
+            0xba => self.cp8(self.register.get_d()),
+            0xbb => self.cp8(self.register.get_e()),
+            0xbc => self.cp8(self.register.get_h()),
+            0xbd => self.cp8(self.register.get_l()),
+            0xbe => self.cp8(self.memory.get8(self.register.get_hl())),
+            0xfe => {
+                let n = self.imm8();
+                self.cp8(n)
+            },
+
             _ => (),
         }
     }
@@ -314,17 +427,17 @@ impl Cpu {
         self.register.set_sp(self.register.get_sp() - 2)
     }
 
-    pub fn add8(&mut self, b: u8) {
+    pub fn add8(&mut self, n: u8) {
         let a = self.register.get_a();
-        let res = a.wrapping_add(b);
+        let res = a.wrapping_add(n);
         let flag = if res == 0 { Flag::Z } else { !Flag::Z }
             | !Flag::N
-            | if (a as u16) + (b as u16) > 0x00ff {
+            | if (a as u16) + (n as u16) > 0x00ff {
                 Flag::C
             } else {
                 !Flag::C
             }
-            | if (a & 0x0f) + (b & 0x0f) > 0x0f {
+            | if (a & 0x0f) + (n & 0x0f) > 0x0f {
                 Flag::H
             } else {
                 !Flag::H
@@ -333,18 +446,18 @@ impl Cpu {
         self.register.set_a(res);
     }
 
-    pub fn adc8(&mut self, b: u8) {
+    pub fn adc8(&mut self, n: u8) {
         let a = self.register.get_a();
         let carry = u8::from(self.register.get_flag(Flag::C));
-        let res = a.wrapping_add(b).wrapping_sub(carry);
+        let res = a.wrapping_add(n).wrapping_sub(carry);
         let flag = if res == 0 { Flag::Z } else { !Flag::Z }
             | !Flag::N
-            | if (a as u16) + (b as u16) + (carry as u16) > 0x00ff {
+            | if (a as u16) + (n as u16) + (carry as u16) > 0x00ff {
                 Flag::C
             } else {
                 !Flag::C
             }
-            | if (a & 0x0f) + (b & 0x0f) + carry > 0x0f {
+            | if (a & 0x0f) + (n & 0x0f) + carry > 0x0f {
                 Flag::H
             } else {
                 !Flag::H
@@ -353,17 +466,17 @@ impl Cpu {
         self.register.set_a(res);
     }
 
-    pub fn sub8(&mut self, b: u8) {
+    pub fn sub8(&mut self, n: u8) {
         let a = self.register.get_a();
-        let res = a.wrapping_sub(b);
+        let res = a.wrapping_sub(n);
         let flag = if res == 0 { Flag::Z } else { !Flag::Z }
-            | !Flag::N
-            | if (a as u16) < (b as u16) {
+            | Flag::N
+            | if (a as u16) < (n as u16) {
                 Flag::C
             } else {
                 !Flag::C
             }
-            | if (a & 0x0f) < (b & 0x0f) {
+            | if (a & 0x0f) < (n & 0x0f) {
                 Flag::H
             } else {
                 !Flag::H
@@ -372,18 +485,18 @@ impl Cpu {
         self.register.set_a(res);
     }
 
-    pub fn sbc8(&mut self, b: u8) {
+    pub fn sbc8(&mut self, n: u8) {
         let a = self.register.get_a();
         let carry = u8::from(self.register.get_flag(Flag::C));
-        let res = a.wrapping_sub(b).wrapping_sub(carry);
+        let res = a.wrapping_sub(n).wrapping_sub(carry);
         let flag = if res == 0 { Flag::Z } else { !Flag::Z }
-            | !Flag::N
-            | if (a as u16) < ((b + carry) as u16) {
+            | Flag::N
+            | if (a as u16) < ((n + carry) as u16) {
                 Flag::C
             } else {
                 !Flag::C
             }
-            | if (a & 0x0f) < ((b + carry) & 0x0f) {
+            | if (a & 0x0f) < ((n + carry) & 0x0f) {
                 Flag::H
             } else {
                 !Flag::H
@@ -391,4 +504,46 @@ impl Cpu {
         self.register.set_flag(flag);
         self.register.set_a(res);
     }
+
+    pub fn and8(&mut self, n: u8) {
+        let a = self.register.get_a();
+        let res = a & n;
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z } | !Flag::N | Flag::H | !Flag::C;
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
+
+    pub fn or8(&mut self, n: u8) {
+        let a = self.register.get_a();
+        let res = a | n;
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z } | !Flag::N | !Flag::H | !Flag::C;
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
+
+    pub fn xor8(&mut self, n: u8) {
+        let a = self.register.get_a();
+        let res = a ^ n;
+        let flag = if res == 0 { Flag::Z } else { !Flag::Z } | !Flag::N | !Flag::H | !Flag::C;
+        self.register.set_flag(flag);
+        self.register.set_a(res);
+    }
+
+    pub fn cp8(&mut self, n: u8) {
+        let a = self.register.get_a();
+        let flag = if a == n { Flag::Z } else { !Flag::Z }
+            | Flag::N
+            | if (a as u16) < (n as u16) {
+                Flag::C
+            } else {
+                !Flag::C
+            }
+            | if (a & 0x0f) < (n & 0x0f) {
+                Flag::H
+            } else {
+                !Flag::H
+            };
+        self.register.set_flag(flag);
+    }
+
 }
