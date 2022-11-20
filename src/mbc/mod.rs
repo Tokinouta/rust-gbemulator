@@ -1,9 +1,26 @@
+use std::{io::Read, path::PathBuf};
+
 mod mbc1;
 mod nombc;
 
-pub enum Cartridge {
-    NoMBC(NoMBC),
-    MBC1(MBC1),
+pub struct Cartridge {
+    content: Vec<u8>,
+}
+
+impl Cartridge {
+    pub fn new(path: PathBuf) -> std::io::Result<Self> {
+        let mut file = std::fs::File::open(path)?;
+        let size = file.metadata()?.len() as usize;
+        let mut v = vec![0; size];
+        file.read(&mut v)?;
+        Ok(Self { content: v })
+    }
+
+    pub fn header(&self) -> CartridgeHeader {
+        CartridgeHeader {
+            ch: self.content[0x100..=0x14f].try_into().unwrap(),
+        }
+    }
 }
 
 pub struct CartridgeHeader {

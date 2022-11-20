@@ -1,6 +1,8 @@
+use std::{io::Read, path::PathBuf};
+
 use crate::memory::MemoryIO;
 
-use super::NoMBC;
+use super::{Cartridge, NoMBC};
 
 impl NoMBC {
     pub fn new() -> Self {
@@ -8,6 +10,10 @@ impl NoMBC {
             rom_bank: [0; 0x8000],
             ram_bank: [0; 0x2000],
         }
+    }
+
+    fn load_rom(&mut self, rom: &Vec<u8>) {
+        self.rom_bank.clone_from_slice(&rom[..]);
     }
 }
 
@@ -50,5 +56,13 @@ impl MemoryIO for NoMBC {
             },
             _ => (),
         }
+    }
+}
+
+impl From<Cartridge> for NoMBC {
+    fn from(c: Cartridge) -> Self {
+        let mut mbc1 = Self::new();
+        mbc1.load_rom(&c.content);
+        mbc1
     }
 }

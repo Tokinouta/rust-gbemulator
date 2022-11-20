@@ -1,6 +1,6 @@
 use crate::memory::MemoryIO;
 
-use super::{BankingMode, CartridgeHeader, MBC1};
+use super::{BankingMode, Cartridge, CartridgeHeader, MBC1};
 
 impl MBC1 {
     pub fn new(header: CartridgeHeader) -> Self {
@@ -13,6 +13,11 @@ impl MBC1 {
             ram_bank: Vec::with_capacity(header.ram_size()),
         }
     }
+
+    fn load_rom(&mut self, rom: &Vec<u8>) {
+        self.rom_bank.clone_from(rom);
+    }
+
     fn set_ram_enable(&mut self, is_enabled: u8) {
         match is_enabled {
             0x00 => self.ram_enable = false,
@@ -141,5 +146,14 @@ impl MemoryIO for MBC1 {
             },
             _ => (),
         }
+    }
+}
+
+impl From<Cartridge> for MBC1 {
+    fn from(c: Cartridge) -> Self {
+        let header = c.header();
+        let mut mbc1 = Self::new(header);
+        mbc1.load_rom(&c.content);
+        mbc1
     }
 }
