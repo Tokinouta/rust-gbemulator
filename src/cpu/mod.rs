@@ -1,4 +1,4 @@
-use crate::memory::Memory;
+use crate::memory::{Memory, MemoryIO};
 
 use self::register::{Flag, Register};
 
