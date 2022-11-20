@@ -1,7 +1,12 @@
 mod mbc1;
 mod nombc;
 
-struct CartridgeHeader {
+pub enum Cartridge {
+    NoMBC(NoMBC),
+    MBC1(MBC1),
+}
+
+pub struct CartridgeHeader {
     ch: [u8; 0x50],
 }
 
@@ -97,17 +102,12 @@ enum BankingMode {
     Advanced,
 }
 
-enum Cartridge {
-    NoMBC(NoMBC),
-    MBC1(MBC1),
-}
-
-struct NoMBC {
+pub struct NoMBC {
     rom_bank: [u8; 0x8000],
     ram_bank: [u8; 0x2000],
 }
 
-struct MBC1 {
+pub struct MBC1 {
     ram_enable: bool,
     rom_bank_number: u8,
     ram_bank_number: u8,

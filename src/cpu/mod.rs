@@ -1,4 +1,4 @@
-use crate::memory::{Memory, MemoryIO};
+use crate::{memory::{Memory, MemoryIO}, mbc::CartridgeHeader};
 
 use self::register::{Flag, Register};
 
@@ -11,10 +11,10 @@ struct Cpu {
 }
 
 impl Cpu {
-    pub fn new() -> Self {
+    pub fn new(header: CartridgeHeader) -> Self {
         Self {
             register: Register::new(),
-            memory: Memory::new(),
+            memory: Memory::new(header),
             opcode: 0,
         }
     }

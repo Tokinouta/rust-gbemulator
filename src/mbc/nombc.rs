@@ -2,6 +2,15 @@ use crate::memory::MemoryIO;
 
 use super::NoMBC;
 
+impl NoMBC {
+    pub fn new() -> Self {
+        Self {
+            rom_bank: [0; 0x8000],
+            ram_bank: [0; 0x2000],
+        }
+    }
+}
+
 impl MemoryIO for NoMBC {
     fn get8(&self, address: u16) -> u8 {
         match address {
