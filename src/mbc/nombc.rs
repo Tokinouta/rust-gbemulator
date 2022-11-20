@@ -1,5 +1,3 @@
-use std::{io::Read, path::PathBuf};
-
 use crate::memory::MemoryIO;
 
 use super::{Cartridge, NoMBC};
