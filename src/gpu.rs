@@ -1,3 +1,7 @@
+// TODO: I think i should finish writing the CPU, the interrupt system before starting the GPU. So this part will be continued after I finished the parts above.
+
+// Actually, I lack a lot of necessary knowledge about a computer system, and that is the hardest part which always hampers me from smoothly writing.
+
 use crate::memory::MemoryIO;
 
 struct Gpu {
@@ -21,6 +25,65 @@ struct Gpu {
     ocps_obpi: u16,
     ocpd_obpd: u16,
     // BGP, OBP0 and OBP1, and BCPS/BGPI, BCPD/BGPD, OCPS/OBPI and OCPD/OBPD (CGB Mode).
+
+    mode: u8,
+    mode_counter: u32,
+}
+
+impl Gpu {
+    fn lcd_and_ppu_enable(&self) -> bool {
+        self.lcd_control & 0x80 != 0
+    }
+    fn window_tile_map_area(&self) -> bool {
+        self.lcd_control & 0x40 != 0
+    }
+    fn window_enable(&self) -> bool {
+        self.lcd_control & 0x20 != 0
+    }
+    fn bg_and_window_tile_data_area(&self) -> bool {
+        self.lcd_control & 0x10 != 0
+    }
+    fn bg_tile_map_area(&self) -> bool {
+        self.lcd_control & 0x8 != 0
+    }
+    fn obj_size(&self) -> bool {
+        self.lcd_control & 0x4 != 0
+    }
+    fn obj_enable(&self) -> bool {
+        self.lcd_control & 0x2 != 0
+    }
+    fn bg_and_window_enable(&self) -> bool {
+        self.lcd_control & 0x1 != 0
+    }
+
+    // LYC=LY STAT Interrupt source         (1=Enable) (Read/Write)
+    // Bit 5 - Mode 2 OAM STAT Interrupt source     (1=Enable) (Read/Write)
+    // Bit 4 - Mode 1 VBlank STAT Interrupt source  (1=Enable) (Read/Write)
+    // Bit 3 - Mode 0 HBlank STAT Interrupt source  (1=Enable) (Read/Write)
+    // Bit 2 - LYC=LY Flag                          (0=Different, 1=Equal) (Read Only)
+    // Bit 1-0 - Mode Flag
+
+    fn Scanlines(&mut self) {
+    }
+
+    /// 这里主要控制中断，不同模式的中断不一样
+    fn change_mode(&mut self, mode: u8) {
+        match mode {
+            0 => {
+                self.mode = 0;
+            },
+            1 => {
+                self.mode = 1;
+            },
+            2 => {
+                self.mode = 2;
+            },
+            3 => {
+                self.mode = 3;
+            },
+            _ => ()
+        }
+    }
 }
 
 struct OAMEntry {
