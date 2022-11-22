@@ -1,4 +1,7 @@
-use crate::{memory::{Memory, MemoryIO}, mbc::CartridgeHeader};
+use crate::{
+    mbc::CartridgeHeader,
+    memory::{Memory, MemoryIO},
+};
 
 use self::register::{Flag, Register};
 
@@ -33,6 +36,9 @@ impl Cpu {
 
     pub fn ld(&mut self, opcode: u8) {
         match opcode {
+            // NOP
+            0x00 => (),
+
             // ld nn,n 8 bit immediate
             0x06 => {
                 let n = self.imm8();
@@ -422,6 +428,56 @@ impl Cpu {
             0x1b => self.register.set_de(self.register.get_de().wrapping_sub(1)),
             0x2b => self.register.set_hl(self.register.get_hl().wrapping_sub(1)),
             0x3b => self.register.set_sp(self.register.get_sp().wrapping_sub(1)),
+
+            // DAA
+            0x27 => self.daa(),
+
+            // CPL
+            0x2f => self.register.a ^= 0xff,
+
+            // CCF
+            0x3f => {
+                let flag = self.register.get_flag(Flag::C);
+                let new_flag = if flag { !Flag::C } else { Flag::C } | !Flag::N | !Flag::H;
+                self.register.set_flag(new_flag);
+            }
+
+            // SCF
+            0x37 => {
+                let flag = Flag::C | !Flag::N | !Flag::C;
+                self.register.set_flag(flag);
+            }
+
+            // HALT
+            0x76 => (),
+
+            // STOP
+            0x10 => (),
+
+            // DI
+            0xf3 => (),
+
+            // EI
+            0xfb => (),
+
+            0xcb => {
+                let opcode2 = self.imm8();
+                match opcode2 {
+                    0x37 => self.register.a = self.swap(self.register.a),
+                    0x30 => self.register.b = self.swap(self.register.b),
+                    0x31 => self.register.c = self.swap(self.register.c),
+                    0x32 => self.register.d = self.swap(self.register.d),
+                    0x33 => self.register.e = self.swap(self.register.e),
+                    0x34 => self.register.h = self.swap(self.register.h),
+                    0x35 => self.register.l = self.swap(self.register.l),
+                    0x36 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.swap(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+                    _ => (),
+                }
+            }
             _ => (),
         }
     }
@@ -683,5 +739,39 @@ impl Cpu {
                 !Flag::H
             };
         self.register.set_flag(flag)
+    }
+
+    fn swap(&mut self, reg: u8) -> u8 {
+        let flag = if reg == 0 { Flag::Z } else { !Flag::Z } | !Flag::N | !Flag::H | !Flag::C;
+        self.register.set_flag(flag);
+        (reg & 0x0f) << 4 | (reg & 0xf0) >> 4
+    }
+
+    fn daa(&mut self) {
+        let mut a = self.register.a;
+        let mut adjust = 0;
+        if self.register.get_flag(Flag::C) {
+            adjust |= 0x60;
+        }
+        if self.register.get_flag(Flag::H) {
+            adjust |= 0x06;
+        };
+        if !self.register.get_flag(Flag::N) {
+            if a & 0x0F > 0x09 {
+                adjust |= 0x06;
+            };
+            if a > 0x99 {
+                adjust |= 0x60;
+            };
+            a = a.wrapping_add(adjust);
+        } else {
+            a = a.wrapping_sub(adjust);
+        }
+
+        let flag = if adjust >= 0x60 { Flag::C } else { !Flag::C }
+            | !Flag::H
+            | if a == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        self.register.a = a;
     }
 }
