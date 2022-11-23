@@ -542,6 +542,48 @@ impl Cpu {
                         self.memory.set8(self.register.get_hl(), temp);
                     }
 
+                    // SLA n
+                    0x27 => self.register.a = self.sl(self.register.a),
+                    0x20 => self.register.b = self.sl(self.register.b),
+                    0x21 => self.register.c = self.sl(self.register.c),
+                    0x22 => self.register.d = self.sl(self.register.d),
+                    0x23 => self.register.e = self.sl(self.register.e),
+                    0x24 => self.register.h = self.sl(self.register.h),
+                    0x25 => self.register.l = self.sl(self.register.l),
+                    0x26 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.sl(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SRA n
+                    0x2f => self.register.a = self.sr(self.register.a),
+                    0x28 => self.register.b = self.sr(self.register.b),
+                    0x29 => self.register.c = self.sr(self.register.c),
+                    0x2a => self.register.d = self.sr(self.register.d),
+                    0x2b => self.register.e = self.sr(self.register.e),
+                    0x2c => self.register.h = self.sr(self.register.h),
+                    0x2d => self.register.l = self.sr(self.register.l),
+                    0x2e => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.sr(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SRL n
+                    0x3f => self.register.a = self.srl(self.register.a),
+                    0x38 => self.register.b = self.srl(self.register.b),
+                    0x39 => self.register.c = self.srl(self.register.c),
+                    0x3a => self.register.d = self.srl(self.register.d),
+                    0x3b => self.register.e = self.srl(self.register.e),
+                    0x3c => self.register.h = self.srl(self.register.h),
+                    0x3d => self.register.l = self.srl(self.register.l),
+                    0x3e => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.srl(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
                     _ => (),
                 }
             }
@@ -887,4 +929,32 @@ impl Cpu {
         self.register.set_flag(flag);
         reg
     }
+
+    fn sl(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x80;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let reg = reg << 1;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
+    }
+
+    fn sr(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x80;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let reg = ((reg as i8) >> 1) as u8;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
+    }
+
+    fn srl(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x80;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let reg = reg >> 1;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
+    }
+
 }
