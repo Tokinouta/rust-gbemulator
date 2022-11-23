@@ -460,9 +460,19 @@ impl Cpu {
             // EI
             0xfb => (),
 
+            // RLCA
+            0x07 => self.register.a = self.rlc(self.register.a),
+            // RLCA
+            0x0f => self.register.a = self.rl(self.register.a),
+            // RLCA
+            0x17 => self.register.a = self.rrc(self.register.a),
+            // RLCA
+            0x1f => self.register.a = self.rr(self.register.a),
+
             0xcb => {
                 let opcode2 = self.imm8();
                 match opcode2 {
+                    // SWAP
                     0x37 => self.register.a = self.swap(self.register.a),
                     0x30 => self.register.b = self.swap(self.register.b),
                     0x31 => self.register.c = self.swap(self.register.c),
@@ -475,6 +485,63 @@ impl Cpu {
                         temp = self.swap(temp);
                         self.memory.set8(self.register.get_hl(), temp);
                     }
+
+                    // RLC n
+                    0x07 => self.register.a = self.rlc(self.register.a),
+                    0x00 => self.register.b = self.rlc(self.register.b),
+                    0x01 => self.register.c = self.rlc(self.register.c),
+                    0x02 => self.register.d = self.rlc(self.register.d),
+                    0x03 => self.register.e = self.rlc(self.register.e),
+                    0x04 => self.register.h = self.rlc(self.register.h),
+                    0x05 => self.register.l = self.rlc(self.register.l),
+                    0x06 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.rlc(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RL n
+                    0x17 => self.register.a = self.rl(self.register.a),
+                    0x10 => self.register.b = self.rl(self.register.b),
+                    0x11 => self.register.c = self.rl(self.register.c),
+                    0x12 => self.register.d = self.rl(self.register.d),
+                    0x13 => self.register.e = self.rl(self.register.e),
+                    0x14 => self.register.h = self.rl(self.register.h),
+                    0x15 => self.register.l = self.rl(self.register.l),
+                    0x16 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.rl(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RRC n
+                    0x0f => self.register.a = self.rrc(self.register.a),
+                    0x08 => self.register.b = self.rrc(self.register.b),
+                    0x09 => self.register.c = self.rrc(self.register.c),
+                    0x0a => self.register.d = self.rrc(self.register.d),
+                    0x0b => self.register.e = self.rrc(self.register.e),
+                    0x0c => self.register.h = self.rrc(self.register.h),
+                    0x0d => self.register.l = self.rrc(self.register.l),
+                    0x0e => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.rrc(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RR n
+                    0x1f => self.register.a = self.rr(self.register.a),
+                    0x18 => self.register.b = self.rr(self.register.b),
+                    0x19 => self.register.c = self.rr(self.register.c),
+                    0x1a => self.register.d = self.rr(self.register.d),
+                    0x1b => self.register.e = self.rr(self.register.e),
+                    0x1c => self.register.h = self.rr(self.register.h),
+                    0x1d => self.register.l = self.rr(self.register.l),
+                    0x1e => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.rr(temp);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
                     _ => (),
                 }
             }
@@ -773,5 +840,51 @@ impl Cpu {
             | if a == 0 { Flag::Z } else { !Flag::Z };
         self.register.set_flag(flag);
         self.register.a = a;
+    }
+
+    fn rlc(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x80;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let reg = reg << 1 | temp >> 7;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
+    }
+
+    fn rl(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x80;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let temp = if self.register.get_flag(Flag::C) {
+            1
+        } else {
+            0
+        };
+        let reg = reg << 1 | temp;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
+    }
+
+    fn rrc(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x01;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let reg = reg >> 1 | temp << 7;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
+    }
+
+    fn rr(&mut self, reg: u8) -> u8 {
+        let temp = reg | 0x01;
+        let mut flag = if temp != 0 { Flag::C } else { !Flag::C } | !Flag::N | !Flag::H;
+        let temp = if self.register.get_flag(Flag::C) {
+            1
+        } else {
+            0
+        };
+        let reg = reg >> 1 | temp << 7;
+        flag |= if reg == 0 { Flag::Z } else { !Flag::Z };
+        self.register.set_flag(flag);
+        reg
     }
 }
