@@ -142,8 +142,8 @@ impl Register {
     }
 
     #[inline]
-    pub fn pc_inc(&mut self, n: u16) {
-        self.pc += n;
+    pub fn pc_inc(&mut self, n: i16) {
+        self.pc = (self.pc as i16 + n) as u16;
     }
 }
 

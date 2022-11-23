@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     mbc::CartridgeHeader,
     memory::{Memory, MemoryIO},
@@ -469,6 +471,23 @@ impl Cpu {
             // RLCA
             0x1f => self.register.a = self.rr(self.register.a),
 
+            // JP nn
+            0xc3 => self.jump(),
+            // JP cc, nn
+            0xc2 => self.jump_ncondition(Flag::Z),
+            0xca => self.jump_condition(Flag::Z),
+            0xd2 => self.jump_ncondition(Flag::C),
+            0xda => self.jump_condition(Flag::C),
+            // JP (HL)
+            0xe9 => self.jump_register(),
+            // JR n
+            0x18 => self.jump_relative(),
+            // JR cc, n
+            0x20 => self.jump_relative_ncondition(Flag::Z),
+            0x28 => self.jump_relative_condition(Flag::Z),
+            0x30 => self.jump_relative_ncondition(Flag::C),
+            0x38 => self.jump_relative_condition(Flag::C),
+            
             0xcb => {
                 let opcode2 = self.imm8();
                 match opcode2 {
@@ -1301,5 +1320,45 @@ impl Cpu {
 
     fn reset(&mut self, reg: u8, b: u8) -> u8 {
         reg & !(1 << b)
+    }
+
+    fn jump(&mut self) {
+        let address = self.imm16();
+        self.register.pc = address;
+    }
+
+    fn jump_condition(&mut self, condition: Flag) {
+        if self.register.get_flag(condition) {
+            self.jump();
+        }
+    }
+
+    fn jump_ncondition(&mut self, condition: Flag) {
+        if !self.register.get_flag(condition) {
+            self.jump();
+        }
+    }
+
+    fn jump_register(&mut self) {
+        let reg = self.register.get_hl();
+        let address = self.memory.get16(reg);
+        self.register.pc = address;
+    }
+
+    fn jump_relative(&mut self) {
+        let displacement = self.imm8();
+        self.register.pc_inc(displacement as i8 as i16);
+    }
+
+    fn jump_relative_condition(&mut self, condition: Flag) {
+        if self.register.get_flag(condition) {
+            self.jump_relative();
+        }
+    }
+
+    fn jump_relative_ncondition(&mut self, condition: Flag) {
+        if !self.register.get_flag(condition) {
+            self.jump_relative();
+        }
     }
 }
