@@ -584,6 +584,334 @@ impl Cpu {
                         self.memory.set8(self.register.get_hl(), temp);
                     }
 
+                    // BIT 0, r
+                    0x47 => self.bit(self.register.a, 0),
+                    0x40 => self.bit(self.register.b, 0),
+                    0x41 => self.bit(self.register.c, 0),
+                    0x42 => self.bit(self.register.d, 0),
+                    0x43 => self.bit(self.register.e, 0),
+                    0x44 => self.bit(self.register.h, 0),
+                    0x45 => self.bit(self.register.l, 0),
+                    0x46 => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 0);
+                    }
+
+                    // BIT 1, r
+                    0x4f => self.bit(self.register.a, 1),
+                    0x48 => self.bit(self.register.b, 1),
+                    0x49 => self.bit(self.register.c, 1),
+                    0x4a => self.bit(self.register.d, 1),
+                    0x4b => self.bit(self.register.e, 1),
+                    0x4c => self.bit(self.register.h, 1),
+                    0x4d => self.bit(self.register.l, 1),
+                    0x4e => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 1);
+                    }
+
+                    // BIT 2, r
+                    0x57 => self.bit(self.register.a, 2),
+                    0x50 => self.bit(self.register.b, 2),
+                    0x51 => self.bit(self.register.c, 2),
+                    0x52 => self.bit(self.register.d, 2),
+                    0x53 => self.bit(self.register.e, 2),
+                    0x54 => self.bit(self.register.h, 2),
+                    0x55 => self.bit(self.register.l, 2),
+                    0x56 => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 2);
+                    }
+
+                    // BIT 3, r
+                    0x5f => self.bit(self.register.a, 3),
+                    0x58 => self.bit(self.register.b, 3),
+                    0x59 => self.bit(self.register.c, 3),
+                    0x5a => self.bit(self.register.d, 3),
+                    0x5b => self.bit(self.register.e, 3),
+                    0x5c => self.bit(self.register.h, 3),
+                    0x5d => self.bit(self.register.l, 3),
+                    0x5e => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 3);
+                    }
+
+                    // BIT 4, r
+                    0x67 => self.bit(self.register.a, 4),
+                    0x60 => self.bit(self.register.b, 4),
+                    0x61 => self.bit(self.register.c, 4),
+                    0x62 => self.bit(self.register.d, 4),
+                    0x63 => self.bit(self.register.e, 4),
+                    0x64 => self.bit(self.register.h, 4),
+                    0x65 => self.bit(self.register.l, 4),
+                    0x66 => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 4);
+                    }
+
+                    // BIT 5, r
+                    0x6f => self.bit(self.register.a, 5),
+                    0x68 => self.bit(self.register.b, 5),
+                    0x69 => self.bit(self.register.c, 5),
+                    0x6a => self.bit(self.register.d, 5),
+                    0x6b => self.bit(self.register.e, 5),
+                    0x6c => self.bit(self.register.h, 5),
+                    0x6d => self.bit(self.register.l, 5),
+                    0x6e => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 5);
+                    }
+
+                    // BIT 6, r
+                    0x77 => self.bit(self.register.a, 6),
+                    0x70 => self.bit(self.register.b, 6),
+                    0x71 => self.bit(self.register.c, 6),
+                    0x72 => self.bit(self.register.d, 6),
+                    0x73 => self.bit(self.register.e, 6),
+                    0x74 => self.bit(self.register.h, 6),
+                    0x75 => self.bit(self.register.l, 6),
+                    0x76 => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 6);
+                    }
+
+                    // BIT 7, r
+                    0x7f => self.bit(self.register.a, 7),
+                    0x78 => self.bit(self.register.b, 7),
+                    0x79 => self.bit(self.register.c, 7),
+                    0x7a => self.bit(self.register.d, 7),
+                    0x7b => self.bit(self.register.e, 7),
+                    0x7c => self.bit(self.register.h, 7),
+                    0x7d => self.bit(self.register.l, 7),
+                    0x7e => {
+                        let temp = self.memory.get8(self.register.get_hl());
+                        self.bit(temp, 7);
+                    }
+
+                    // SET 0, r
+                    0xc7 => self.register.a = self.set(self.register.a, 0),
+                    0xc0 => self.register.b = self.set(self.register.b, 0),
+                    0xc1 => self.register.c = self.set(self.register.c, 0),
+                    0xc2 => self.register.d = self.set(self.register.d, 0),
+                    0xc3 => self.register.e = self.set(self.register.e, 0),
+                    0xc4 => self.register.h = self.set(self.register.h, 0),
+                    0xc5 => self.register.l = self.set(self.register.l, 0),
+                    0xc6 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 0);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 1, r
+                    0xcf => self.register.a = self.set(self.register.a, 1),
+                    0xc8 => self.register.b = self.set(self.register.b, 1),
+                    0xc9 => self.register.c = self.set(self.register.c, 1),
+                    0xca => self.register.d = self.set(self.register.d, 1),
+                    0xcb => self.register.e = self.set(self.register.e, 1),
+                    0xcc => self.register.h = self.set(self.register.h, 1),
+                    0xcd => self.register.l = self.set(self.register.l, 1),
+                    0xce => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 1);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 2, r
+                    0xd7 => self.register.a = self.set(self.register.a, 2),
+                    0xd0 => self.register.b = self.set(self.register.b, 2),
+                    0xd1 => self.register.c = self.set(self.register.c, 2),
+                    0xd2 => self.register.d = self.set(self.register.d, 2),
+                    0xd3 => self.register.e = self.set(self.register.e, 2),
+                    0xd4 => self.register.h = self.set(self.register.h, 2),
+                    0xd5 => self.register.l = self.set(self.register.l, 2),
+                    0xd6 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 2);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 3, r
+                    0xdf => self.register.a = self.set(self.register.a, 3),
+                    0xd8 => self.register.b = self.set(self.register.b, 3),
+                    0xd9 => self.register.c = self.set(self.register.c, 3),
+                    0xda => self.register.d = self.set(self.register.d, 3),
+                    0xdb => self.register.e = self.set(self.register.e, 3),
+                    0xdc => self.register.h = self.set(self.register.h, 3),
+                    0xdd => self.register.l = self.set(self.register.l, 3),
+                    0xde => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 3);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 4, r
+                    0xe7 => self.register.a = self.set(self.register.a, 4),
+                    0xe0 => self.register.b = self.set(self.register.b, 4),
+                    0xe1 => self.register.c = self.set(self.register.c, 4),
+                    0xe2 => self.register.d = self.set(self.register.d, 4),
+                    0xe3 => self.register.e = self.set(self.register.e, 4),
+                    0xe4 => self.register.h = self.set(self.register.h, 4),
+                    0xe5 => self.register.l = self.set(self.register.l, 4),
+                    0xe6 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 4);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 5, r
+                    0xef => self.register.a = self.set(self.register.a, 5),
+                    0xe8 => self.register.b = self.set(self.register.b, 5),
+                    0xe9 => self.register.c = self.set(self.register.c, 5),
+                    0xea => self.register.d = self.set(self.register.d, 5),
+                    0xeb => self.register.e = self.set(self.register.e, 5),
+                    0xec => self.register.h = self.set(self.register.h, 5),
+                    0xed => self.register.l = self.set(self.register.l, 5),
+                    0xee => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 5);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 6, r
+                    0xf7 => self.register.a = self.set(self.register.a, 6),
+                    0xf0 => self.register.b = self.set(self.register.b, 6),
+                    0xf1 => self.register.c = self.set(self.register.c, 6),
+                    0xf2 => self.register.d = self.set(self.register.d, 6),
+                    0xf3 => self.register.e = self.set(self.register.e, 6),
+                    0xf4 => self.register.h = self.set(self.register.h, 6),
+                    0xf5 => self.register.l = self.set(self.register.l, 6),
+                    0xf6 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 6);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // SET 7, r
+                    0xff => self.register.a = self.set(self.register.a, 7),
+                    0xf8 => self.register.b = self.set(self.register.b, 7),
+                    0xf9 => self.register.c = self.set(self.register.c, 7),
+                    0xfa => self.register.d = self.set(self.register.d, 7),
+                    0xfb => self.register.e = self.set(self.register.e, 7),
+                    0xfc => self.register.h = self.set(self.register.h, 7),
+                    0xfd => self.register.l = self.set(self.register.l, 7),
+                    0xfe => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.set(temp, 7);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 0, r
+                    0x87 => self.register.a = self.reset(self.register.a, 0),
+                    0x80 => self.register.b = self.reset(self.register.b, 0),
+                    0x81 => self.register.c = self.reset(self.register.c, 0),
+                    0x82 => self.register.d = self.reset(self.register.d, 0),
+                    0x83 => self.register.e = self.reset(self.register.e, 0),
+                    0x84 => self.register.h = self.reset(self.register.h, 0),
+                    0x85 => self.register.l = self.reset(self.register.l, 0),
+                    0x86 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 0);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 1, r
+                    0x8f => self.register.a = self.reset(self.register.a, 1),
+                    0x88 => self.register.b = self.reset(self.register.b, 1),
+                    0x89 => self.register.c = self.reset(self.register.c, 1),
+                    0x8a => self.register.d = self.reset(self.register.d, 1),
+                    0x8b => self.register.e = self.reset(self.register.e, 1),
+                    0x8c => self.register.h = self.reset(self.register.h, 1),
+                    0x8d => self.register.l = self.reset(self.register.l, 1),
+                    0x8e => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 1);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 2, r
+                    0x97 => self.register.a = self.reset(self.register.a, 2),
+                    0x90 => self.register.b = self.reset(self.register.b, 2),
+                    0x91 => self.register.c = self.reset(self.register.c, 2),
+                    0x92 => self.register.d = self.reset(self.register.d, 2),
+                    0x93 => self.register.e = self.reset(self.register.e, 2),
+                    0x94 => self.register.h = self.reset(self.register.h, 2),
+                    0x95 => self.register.l = self.reset(self.register.l, 2),
+                    0x96 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 2);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 3, r
+                    0x9f => self.register.a = self.reset(self.register.a, 3),
+                    0x98 => self.register.b = self.reset(self.register.b, 3),
+                    0x99 => self.register.c = self.reset(self.register.c, 3),
+                    0x9a => self.register.d = self.reset(self.register.d, 3),
+                    0x9b => self.register.e = self.reset(self.register.e, 3),
+                    0x9c => self.register.h = self.reset(self.register.h, 3),
+                    0x9d => self.register.l = self.reset(self.register.l, 3),
+                    0x9e => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 3);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 4, r
+                    0xa7 => self.register.a = self.reset(self.register.a, 4),
+                    0xa0 => self.register.b = self.reset(self.register.b, 4),
+                    0xa1 => self.register.c = self.reset(self.register.c, 4),
+                    0xa2 => self.register.d = self.reset(self.register.d, 4),
+                    0xa3 => self.register.e = self.reset(self.register.e, 4),
+                    0xa4 => self.register.h = self.reset(self.register.h, 4),
+                    0xa5 => self.register.l = self.reset(self.register.l, 4),
+                    0xa6 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 4);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 5, r
+                    0xaf => self.register.a = self.reset(self.register.a, 5),
+                    0xa8 => self.register.b = self.reset(self.register.b, 5),
+                    0xa9 => self.register.c = self.reset(self.register.c, 5),
+                    0xaa => self.register.d = self.reset(self.register.d, 5),
+                    0xab => self.register.e = self.reset(self.register.e, 5),
+                    0xac => self.register.h = self.reset(self.register.h, 5),
+                    0xad => self.register.l = self.reset(self.register.l, 5),
+                    0xae => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 5);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 6, r
+                    0xb7 => self.register.a = self.reset(self.register.a, 6),
+                    0xb0 => self.register.b = self.reset(self.register.b, 6),
+                    0xb1 => self.register.c = self.reset(self.register.c, 6),
+                    0xb2 => self.register.d = self.reset(self.register.d, 6),
+                    0xb3 => self.register.e = self.reset(self.register.e, 6),
+                    0xb4 => self.register.h = self.reset(self.register.h, 6),
+                    0xb5 => self.register.l = self.reset(self.register.l, 6),
+                    0xb6 => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 6);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
+                    // RES 7, r
+                    0xbf => self.register.a = self.reset(self.register.a, 7),
+                    0xb8 => self.register.b = self.reset(self.register.b, 7),
+                    0xb9 => self.register.c = self.reset(self.register.c, 7),
+                    0xba => self.register.d = self.reset(self.register.d, 7),
+                    0xbb => self.register.e = self.reset(self.register.e, 7),
+                    0xbc => self.register.h = self.reset(self.register.h, 7),
+                    0xbd => self.register.l = self.reset(self.register.l, 7),
+                    0xbe => {
+                        let mut temp = self.memory.get8(self.register.get_hl());
+                        temp = self.reset(temp, 7);
+                        self.memory.set8(self.register.get_hl(), temp);
+                    }
+
                     _ => (),
                 }
             }
@@ -957,4 +1285,21 @@ impl Cpu {
         reg
     }
 
+    fn bit(&mut self, reg: u8, b: u8) {
+        let flag = if reg & (1 << b) == 0 {
+            Flag::Z
+        } else {
+            !Flag::Z
+        } | !Flag::N
+            | Flag::H;
+        self.register.set_flag(flag);
+    }
+
+    fn set(&mut self, reg: u8, b: u8) -> u8 {
+        reg | (1 << b)
+    }
+
+    fn reset(&mut self, reg: u8, b: u8) -> u8 {
+        reg & !(1 << b)
+    }
 }
