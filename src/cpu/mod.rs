@@ -13,6 +13,8 @@ struct Cpu {
     register: Register,
     memory: Memory,
     opcode: u8,
+    ime: bool,
+    is_halted: bool,
 }
 
 impl Cpu {
@@ -21,75 +23,78 @@ impl Cpu {
             register: Register::new(),
             memory: Memory::new(header),
             opcode: 0,
+            ime: true,
+            is_halted: false,
         }
     }
 
-    fn imm8(&mut self) -> u8 {
+    fn fetch8(&mut self) -> u8 {
         let imm8 = self.memory.get8(self.register.get_pc());
         self.register.pc_inc(1);
         imm8
     }
 
-    fn imm16(&mut self) -> u16 {
+    fn fetch16(&mut self) -> u16 {
         let imm16 = self.memory.get16(self.register.get_pc());
         self.register.pc_inc(2);
         imm16
     }
 
-    pub fn ld(&mut self, opcode: u8) {
+    pub fn ld(&mut self) {
+        let opcode = self.fetch8();
         match opcode {
             // NOP
             0x00 => (),
 
             // ld nn,n 8 bit immediate
             0x06 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_b(n)
             }
             0x0e => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_c(n)
             }
             0x16 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_d(n)
             }
             0x1e => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_e(n)
             }
             0x26 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_h(n)
             }
             0x2e => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_l(n)
             }
             0x36 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.memory.set8(self.register.get_hl(), n)
             }
             0x3e => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_a(n)
             }
 
             // LD n,nn 16 bit immediate
             0x01 => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.register.set_bc(n)
             }
             0x11 => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.register.set_de(n)
             }
             0x21 => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.register.set_hl(n)
             }
             0x31 => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.register.set_sp(n)
             }
 
@@ -207,11 +212,11 @@ impl Cpu {
                 .set8(self.register.get_hl(), self.register.get_a()),
 
             0xfa => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.register.set_a(self.memory.get8(n))
             }
             0xea => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.memory.set8(n, self.register.get_a())
             }
 
@@ -249,12 +254,12 @@ impl Cpu {
             }
             // LDH (n),A
             0xe0 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.memory.set8(0xff00 + n as u16, self.register.get_a())
             }
             // LDH A,(n)
             0xf0 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.register.set_a(self.memory.get8(0xff00 + n as u16))
             }
 
@@ -263,7 +268,7 @@ impl Cpu {
             // LD HL,SP+n
             0xf8 => {
                 let a = self.register.get_sp();
-                let b = self.imm8() as i8 as i16 as u16;
+                let b = self.fetch8() as i8 as i16 as u16;
                 let flag = !Flag::Z
                     | !Flag::N
                     | if (a & 0x00ff) + (b & 0x00ff) > 0x00ff {
@@ -281,7 +286,7 @@ impl Cpu {
             }
             // LD (nn),SP
             0x08 => {
-                let n = self.imm16();
+                let n = self.fetch16();
                 self.memory.set16(self.register.get_sp(), n)
             }
 
@@ -304,7 +309,7 @@ impl Cpu {
             0x85 => self.add8(self.register.get_l()),
             0x86 => self.add8(self.memory.get8(self.register.get_hl())),
             0xc6 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.add8(n)
             }
 
@@ -318,7 +323,7 @@ impl Cpu {
             0x8d => self.adc8(self.register.get_l()),
             0x8e => self.adc8(self.memory.get8(self.register.get_hl())),
             0xce => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.adc8(n)
             }
 
@@ -332,7 +337,7 @@ impl Cpu {
             0x95 => self.sub8(self.register.get_l()),
             0x96 => self.sub8(self.memory.get8(self.register.get_hl())),
             0xd6 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.sub8(n)
             }
 
@@ -346,7 +351,7 @@ impl Cpu {
             0x9d => self.sbc8(self.register.get_l()),
             0x9e => self.sbc8(self.memory.get8(self.register.get_hl())),
             0xde => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.sbc8(n)
             }
 
@@ -360,7 +365,7 @@ impl Cpu {
             0xa5 => self.and8(self.register.get_l()),
             0xa6 => self.and8(self.memory.get8(self.register.get_hl())),
             0xe6 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.and8(n)
             }
 
@@ -374,7 +379,7 @@ impl Cpu {
             0xb5 => self.or8(self.register.get_l()),
             0xb6 => self.or8(self.memory.get8(self.register.get_hl())),
             0xf6 => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.or8(n)
             }
 
@@ -388,7 +393,7 @@ impl Cpu {
             0xad => self.xor8(self.register.get_l()),
             0xae => self.xor8(self.memory.get8(self.register.get_hl())),
             0xee => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.xor8(n)
             }
 
@@ -402,7 +407,7 @@ impl Cpu {
             0xbd => self.cp8(self.register.get_l()),
             0xbe => self.cp8(self.memory.get8(self.register.get_hl())),
             0xfe => {
-                let n = self.imm8();
+                let n = self.fetch8();
                 self.cp8(n)
             }
 
@@ -451,16 +456,16 @@ impl Cpu {
             }
 
             // HALT
-            0x76 => (),
+            0x76 => self.is_halted = true,
 
             // STOP
             0x10 => (),
 
             // DI
-            0xf3 => (),
+            0xf3 => self.ime = false,
 
             // EI
-            0xfb => (),
+            0xfb => self.ime = true,
 
             // RLCA
             0x07 => self.register.a = self.rlc(self.register.a),
@@ -487,9 +492,37 @@ impl Cpu {
             0x28 => self.jump_relative_condition(Flag::Z),
             0x30 => self.jump_relative_ncondition(Flag::C),
             0x38 => self.jump_relative_condition(Flag::C),
-            
+
+            // CALL nn
+            0xcd => self.call(),
+            // CALL cc, nn
+            0xc4 => self.call_ncondition(Flag::Z),
+            0xcc => self.call_condition(Flag::Z),
+            0xd4 => self.call_ncondition(Flag::C),
+            0xdc => self.call_condition(Flag::C),
+
+            // RST n
+            0xc7 => self.restart(0x00),
+            0xcf => self.restart(0x08),
+            0xd7 => self.restart(0x10),
+            0xdf => self.restart(0x18),
+            0xe7 => self.restart(0x20),
+            0xef => self.restart(0x28),
+            0xf7 => self.restart(0x30),
+            0xff => self.restart(0x38),
+
+            // RET
+            0xc9 => self.ret(),
+            // RET cc
+            0xc0 => self.ret_ncondition(Flag::Z),
+            0xc8 => self.ret_condition(Flag::Z),
+            0xd0 => self.ret_ncondition(Flag::C),
+            0xd8 => self.ret_condition(Flag::C),
+            // RETI
+            0xd9 => self.reti(),
+
             0xcb => {
-                let opcode2 = self.imm8();
+                let opcode2 = self.fetch8();
                 match opcode2 {
                     // SWAP
                     0x37 => self.register.a = self.swap(self.register.a),
@@ -986,7 +1019,7 @@ impl Cpu {
 
     fn add16_sp(&mut self) {
         let a = self.register.get_sp();
-        let b = self.imm8() as i8 as i16 as u16;
+        let b = self.fetch8() as i8 as i16 as u16;
         let flag = !Flag::Z
             | !Flag::N
             | if (a & 0x00ff) + (b & 0x00ff) > 0x00ff {
@@ -1323,7 +1356,7 @@ impl Cpu {
     }
 
     fn jump(&mut self) {
-        let address = self.imm16();
+        let address = self.fetch16();
         self.register.pc = address;
     }
 
@@ -1346,7 +1379,7 @@ impl Cpu {
     }
 
     fn jump_relative(&mut self) {
-        let displacement = self.imm8();
+        let displacement = self.fetch8();
         self.register.pc_inc(displacement as i8 as i16);
     }
 
@@ -1360,5 +1393,53 @@ impl Cpu {
         if !self.register.get_flag(condition) {
             self.jump_relative();
         }
+    }
+
+    fn call(&mut self) {
+        let address = self.fetch16();
+        self.memory.set16(self.register.get_sp(), self.register.pc);
+        self.register.set_sp(self.register.get_sp() - 2);
+        self.register.pc = address;
+    }
+
+    fn call_condition(&mut self, condition: Flag) {
+        if self.register.get_flag(condition) {
+            self.call();
+        }
+    }
+
+    fn call_ncondition(&mut self, condition: Flag) {
+        if !self.register.get_flag(condition) {
+            self.call();
+        }
+    }
+
+    fn restart(&mut self, n: u8) {
+        self.memory.set16(self.register.get_sp(), self.register.pc);
+        self.register.set_sp(self.register.get_sp() - 2);
+        self.register.pc = n as u16;
+    }
+
+    fn ret(&mut self) {
+        let address = self.memory.get16(self.register.get_sp());
+        self.register.set_sp(self.register.get_sp() + 2);
+        self.register.pc = address;
+    }
+
+    fn ret_condition(&mut self, condition: Flag) {
+        if self.register.get_flag(condition) {
+            self.ret();
+        }
+    }
+
+    fn ret_ncondition(&mut self, condition: Flag) {
+        if !self.register.get_flag(condition) {
+            self.ret();
+        }
+    }
+
+    fn reti(&mut self) {
+        self.ret();
+        // enable interrupts
     }
 }
