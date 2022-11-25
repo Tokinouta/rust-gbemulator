@@ -9,11 +9,71 @@ use self::register::{Flag, Register};
 
 mod register;
 
+// Nintendo documents describe the CPU & instructions speed in machine cycles while this document describes them in
+// clock cycles. Here is the translation:
+//   1 machine cycle = 4 clock cycles
+//                   GB CPU Speed    NOP Instruction
+// Machine Cycles    1.05MHz         1 cycle
+// Clock Cycles      4.19MHz         4 cycles
+//
+//  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+const OP_CYCLES: [u32; 256] = [
+    1, 3, 2, 2, 1, 1, 2, 1, 5, 2, 2, 2, 1, 1, 2, 1, // 0
+    0, 3, 2, 2, 1, 1, 2, 1, 3, 2, 2, 2, 1, 1, 2, 1, // 1
+    2, 3, 2, 2, 1, 1, 2, 1, 2, 2, 2, 2, 1, 1, 2, 1, // 2
+    2, 3, 2, 2, 3, 3, 3, 1, 2, 2, 2, 2, 1, 1, 2, 1, // 3
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // 4
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // 5
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // 6
+    2, 2, 2, 2, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1, 2, 1, // 7
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // 8
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // 9
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // a
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, // b
+    2, 3, 3, 4, 3, 4, 2, 4, 2, 4, 3, 0, 3, 6, 2, 4, // c
+    2, 3, 3, 0, 3, 4, 2, 4, 2, 4, 3, 0, 3, 0, 2, 4, // d
+    3, 3, 2, 0, 0, 4, 2, 4, 4, 1, 4, 0, 0, 0, 2, 4, // e
+    3, 3, 2, 1, 0, 4, 2, 4, 3, 2, 4, 1, 0, 0, 2, 4, // f
+];
+
+//  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+const CB_CYCLES: [u32; 256] = [
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // 0
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // 1
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // 2
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // 3
+    2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, // 4
+    2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, // 5
+    2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, // 6
+    2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, // 7
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // 8
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // 9
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // a
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // b
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // c
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // d
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // e
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, // f
+];
+
+pub const CLOCK_FREQUENCY: u32 = 4_194_304;
+pub const STEP_TIME: u32 = 16;
+pub const STEP_CYCLES: u32 = (STEP_TIME as f64 / (1000_f64 / CLOCK_FREQUENCY as f64)) as u32;
+
+/// # A Z80-like CPU struct
+///
+/// GameBoy uses a Z80-like CPU for executing instructions. This struct contains a set of registers,
+/// a memory interface and some states.
+///
+/// The CPU has a fetch-execute cycle, which is simulated by the `cycle` function. It first checks
+/// if there are any interrupts. If interrupts are available, then process them first.
+/// Then fetch an instruction and execute it. And don't forget to increment the pc register.
 struct Cpu {
+    /// register set
     register: Register,
+    /// unified memory interface
     memory: Memory,
-    opcode: u8,
-    ime: bool,
+    is_interrupt_enabled: bool,
     is_halted: bool,
 }
 
@@ -22,12 +82,68 @@ impl Cpu {
         Self {
             register: Register::new(),
             memory: Memory::new(header),
-            opcode: 0,
-            ime: true,
+            is_interrupt_enabled: true,
             is_halted: false,
         }
     }
 
+    /// The IME (interrupt master enable) flag is reset by DI and prohibits all interrupts. It is set by EI and
+    /// acknowledges the interrupt setting by the IE register.
+    /// 1. When an interrupt is generated, the IF flag will be set.
+    /// 2. If the IME flag is set & the corresponding IE flag is set, the following 3 steps are performed.
+    /// 3. Reset the IME flag and prevent all interrupts.
+    /// 4. The PC (program counter) is pushed onto the stack.
+    /// 5. Jump to the starting address of the interrupt.
+    fn handle_interrupt(&mut self) -> u32 {
+        if !self.is_halted && !self.is_interrupt_enabled {
+            return 0;
+        }
+        let intf = self.memory.get8(0xff0f);
+        let inte = self.memory.get8(0xffff);
+        let ii = intf & inte;
+        if ii == 0x00 {
+            return 0;
+        }
+        self.is_halted = false;
+        if !self.is_interrupt_enabled {
+            return 0;
+        }
+        self.is_interrupt_enabled = false;
+
+        // Consume an interrupter, the rest is written back to the register
+        let n = ii.trailing_zeros();
+        let intf = intf & !(1 << n);
+        self.memory.set8(0xff0f, intf);
+
+        self.push(self.register.pc);
+        // Set the PC to correspond interrupt process program:
+        // V-Blank: 0x40
+        // LCD: 0x48
+        // TIMER: 0x50
+        // JOYPAD: 0x60
+        // Serial: 0x58
+        self.register.pc = 0x0040 | ((n as u16) << 3);
+        4
+    }
+
+    /// actually simulating the CPU workflow
+    /// interrupt - fetch - execute
+    fn cycle(&mut self) -> u32 {
+        let mac = {
+            let c = self.handle_interrupt();
+            if c != 0 {
+                c
+            } else if self.is_halted {
+                OP_CYCLES[0]
+            } else {
+                self.execute()
+            }
+        };
+        mac * 4
+    }
+}
+
+impl Cpu {
     fn fetch8(&mut self) -> u8 {
         let imm8 = self.memory.get8(self.register.get_pc());
         self.register.pc_inc(1);
@@ -40,7 +156,7 @@ impl Cpu {
         imm16
     }
 
-    pub fn ld(&mut self) {
+    pub fn execute(&mut self) -> u32 {
         let opcode = self.fetch8();
         match opcode {
             // NOP
@@ -462,10 +578,10 @@ impl Cpu {
             0x10 => (),
 
             // DI
-            0xf3 => self.ime = false,
+            0xf3 => self.is_interrupt_enabled = false,
 
             // EI
-            0xfb => self.ime = true,
+            0xfb => self.is_interrupt_enabled = true,
 
             // RLCA
             0x07 => self.register.a = self.rlc(self.register.a),
@@ -966,9 +1082,11 @@ impl Cpu {
 
                     _ => (),
                 }
+                return CB_CYCLES[opcode2 as usize];
             }
             _ => (),
         }
+        OP_CYCLES[opcode as usize]
     }
 
     fn push(&mut self, n: u16) {
@@ -1440,6 +1558,7 @@ impl Cpu {
 
     fn reti(&mut self) {
         self.ret();
+        self.is_interrupt_enabled = true;
         // enable interrupts
     }
 }
