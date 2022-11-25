@@ -1,4 +1,4 @@
-use crate::mbc::{Cartridge, CartridgeHeader, NoMBC, MBC1};
+use crate::{mbc::{Cartridge, CartridgeHeader, NoMBC, MBC1}, interrupt::Interrupt};
 
 pub struct Memory {
     cartridge: Box<dyn MemoryIO>,
@@ -8,7 +8,7 @@ pub struct Memory {
     oam: [u8; 0x9f],
     io_registers: [u8; 0x7f],
     hram: [u8; 0x7e],
-    ie_register: u8,
+    interrupt: Interrupt,
 }
 
 pub trait MemoryIO {
@@ -36,7 +36,7 @@ impl Memory {
             oam: [0; 0x9f],
             io_registers: [0; 0x7f],
             hram: [0; 0x7e],
-            ie_register: 0,
+            interrupt: Interrupt::new(),
         }
     }
 }
@@ -54,7 +54,7 @@ impl MemoryIO for Memory {
             0xfea0..=0xfeff => 0,
             0xff00..=0xff7f => self.io_registers[address as usize - 0xff00],
             0xff80..=0xfffe => self.hram[address as usize - 0xff80],
-            0xffff => self.ie_register,
+            0xffff => self.interrupt.enabled,
         }
     }
 
@@ -70,7 +70,7 @@ impl MemoryIO for Memory {
             0xfea0..=0xfeff => (),
             0xff00..=0xff7f => self.io_registers[address as usize - 0xff00] = n,
             0xff80..=0xfffe => self.hram[address as usize - 0xff80] = n,
-            0xffff => self.ie_register = n,
+            0xffff => self.interrupt.enabled = n,
         }
     }
 

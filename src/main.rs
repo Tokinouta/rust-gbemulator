@@ -1,5 +1,6 @@
 mod cpu;
 mod gpu;
+mod interrupt;
 mod mbc;
 mod memory;
 
