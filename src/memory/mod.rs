@@ -1,4 +1,7 @@
-use crate::{mbc::{Cartridge, CartridgeHeader, NoMBC, MBC1}, interrupt::Interrupt};
+use crate::{
+    interrupt::Interrupt,
+    mbc::{Cartridge, CartridgeHeader, NoMBC, MBC1},
+};
 
 pub struct Memory {
     cartridge: Box<dyn MemoryIO>,
@@ -52,9 +55,10 @@ impl MemoryIO for Memory {
             0xe000..=0xfdff => self.echo_ram[address as usize - 0xe000],
             0xfe00..=0xfe9f => self.oam[address as usize - 0xfe00],
             0xfea0..=0xfeff => 0,
-            0xff00..=0xff7f => self.io_registers[address as usize - 0xff00],
+            // 0xff00..=0xff7f => self.io_registers[address as usize - 0xff00],
             0xff80..=0xfffe => self.hram[address as usize - 0xff80],
-            0xffff => self.interrupt.enabled,
+            0xffff | 0xff0f => self.interrupt.get8(address),
+            _ => todo!("Other IO registers"),
         }
     }
 
@@ -68,9 +72,10 @@ impl MemoryIO for Memory {
             0xe000..=0xfdff => self.echo_ram[address as usize - 0xe000] = n,
             0xfe00..=0xfe9f => self.oam[address as usize - 0xfe00] = n,
             0xfea0..=0xfeff => (),
-            0xff00..=0xff7f => self.io_registers[address as usize - 0xff00] = n,
+            // 0xff00..=0xff7f => self.io_registers[address as usize - 0xff00] = n,
             0xff80..=0xfffe => self.hram[address as usize - 0xff80] = n,
-            0xffff => self.interrupt.enabled = n,
+            0xffff | 0xff0f => self.interrupt.set8(address, n),
+            _ => todo!("Other IO registers"),
         }
     }
 
