@@ -72,13 +72,13 @@ pub struct Cpu {
     /// register set
     register: Register,
     /// unified memory interface
-    memory: Rc<RefCell<dyn MemoryIO>>,
+    memory: Rc<RefCell<Memory>>,
     is_interrupt_enabled: bool,
     is_halted: bool,
 }
 
 impl Cpu {
-    pub fn new(memory: Rc<RefCell<dyn MemoryIO>>) -> Self {
+    pub fn new(memory: Rc<RefCell<Memory>>) -> Self {
         Self {
             register: Register::new(),
             memory,
@@ -272,33 +272,15 @@ impl Cpu {
             0x6f => self.register.set_l(self.register.get_a()),
 
             // LD from/to memory
-            0x0a => self
-                .register
-                .set_a(self.memory.borrow().get8(self.register.get_bc())),
-            0x1a => self
-                .register
-                .set_a(self.memory.borrow().get8(self.register.get_de())),
-            0x7e => self
-                .register
-                .set_a(self.memory.borrow().get8(self.register.get_hl())),
-            0x46 => self
-                .register
-                .set_b(self.memory.borrow().get8(self.register.get_hl())),
-            0x4e => self
-                .register
-                .set_c(self.memory.borrow().get8(self.register.get_hl())),
-            0x56 => self
-                .register
-                .set_d(self.memory.borrow().get8(self.register.get_hl())),
-            0x5e => self
-                .register
-                .set_e(self.memory.borrow().get8(self.register.get_hl())),
-            0x66 => self
-                .register
-                .set_h(self.memory.borrow().get8(self.register.get_hl())),
-            0x6e => self
-                .register
-                .set_l(self.memory.borrow().get8(self.register.get_hl())),
+            0x0a => self.register.a = self.memory.borrow().get8(self.register.get_bc()),
+            0x1a => self.register.a = self.memory.borrow().get8(self.register.get_de()),
+            0x7e => self.register.a = self.memory.borrow().get8(self.register.get_hl()),
+            0x46 => self.register.b = self.memory.borrow().get8(self.register.get_hl()),
+            0x4e => self.register.c = self.memory.borrow().get8(self.register.get_hl()),
+            0x56 => self.register.d = self.memory.borrow().get8(self.register.get_hl()),
+            0x5e => self.register.e = self.memory.borrow().get8(self.register.get_hl()),
+            0x66 => self.register.h = self.memory.borrow().get8(self.register.get_hl()),
+            0x6e => self.register.l = self.memory.borrow().get8(self.register.get_hl()),
             0x02 => self
                 .memory
                 .borrow_mut()
