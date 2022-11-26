@@ -1,10 +1,19 @@
 mod cpu;
+mod gameboy;
 mod gpu;
 mod interrupt;
 mod mbc;
 mod memory;
 
 use eframe::egui;
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum Term {
+    GB,  // Original GameBoy (GameBoy Classic)
+    GBP, // GameBoy Pocket/GameBoy Light
+    GBC, // GameBoy Color
+    SGB, // Super GameBoy
+}
 
 fn main() {
     let options = eframe::NativeOptions::default();

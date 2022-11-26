@@ -4,7 +4,7 @@
 
 use crate::memory::MemoryIO;
 
-struct Gpu {
+pub struct Gpu {
     vram: [u8; 0x2000],
     oam: [u8; 0xa0],
     scrollx: u8,
@@ -25,12 +25,34 @@ struct Gpu {
     ocps_obpi: u16,
     ocpd_obpd: u16,
     // BGP, OBP0 and OBP1, and BCPS/BGPI, BCPD/BGPD, OCPS/OBPI and OCPD/OBPD (CGB Mode).
-
     mode: u8,
     mode_counter: u32,
 }
 
 impl Gpu {
+    pub fn new() -> Self {
+        Self {
+            vram: [0; 0x2000],
+            oam: [0; 0xa0],
+            scrollx: 0,
+            scrolly: 0,
+            wndposx: 0,
+            wndposy: 0,
+            lcd_control: 0,
+            lcd_status: 0,
+            lcd_y_coordinate: 0,
+            ly_compare: 0,
+            bg_palette_data: 0,
+            obj_palette_0: 0,
+            obj_palette_1: 0,
+            bcps_bcpi: 0,
+            bcpd_bgpd: 0,
+            ocps_obpi: 0,
+            ocpd_obpd: 0,
+            mode: 0,
+            mode_counter: 0,
+        }
+    }
     fn lcd_and_ppu_enable(&self) -> bool {
         self.lcd_control & 0x80 != 0
     }
@@ -63,25 +85,24 @@ impl Gpu {
     // Bit 2 - LYC=LY Flag                          (0=Different, 1=Equal) (Read Only)
     // Bit 1-0 - Mode Flag
 
-    fn Scanlines(&mut self) {
-    }
+    fn Scanlines(&mut self) {}
 
     /// 这里主要控制中断，不同模式的中断不一样
     fn change_mode(&mut self, mode: u8) {
         match mode {
             0 => {
                 self.mode = 0;
-            },
+            }
             1 => {
                 self.mode = 1;
-            },
+            }
             2 => {
                 self.mode = 2;
-            },
+            }
             3 => {
                 self.mode = 3;
-            },
-            _ => ()
+            }
+            _ => (),
         }
     }
 }
@@ -159,6 +180,13 @@ mod tests {
         ];
         let tile = data_to_tile(data);
         println!("{:?}", tile);
-        assert_eq!(tile, [0, 2, 3, 3, 3, 3, 2, 0, 0, 3, 0, 0, 0, 0, 3, 0, 0, 3, 0, 0, 0, 0, 3, 0, 0, 3, 0, 0, 0, 0, 3, 0, 0, 3, 1, 3, 3, 3, 3, 0, 0, 1, 1, 1, 3, 1, 3, 0, 0, 3, 1, 3, 1, 3, 2, 0, 0, 2, 3, 3, 3, 2, 0, 0]);
+        assert_eq!(
+            tile,
+            [
+                0, 2, 3, 3, 3, 3, 2, 0, 0, 3, 0, 0, 0, 0, 3, 0, 0, 3, 0, 0, 0, 0, 3, 0, 0, 3, 0, 0,
+                0, 0, 3, 0, 0, 3, 1, 3, 3, 3, 3, 0, 0, 1, 1, 1, 3, 1, 3, 0, 0, 3, 1, 3, 1, 3, 2, 0,
+                0, 2, 3, 3, 3, 2, 0, 0
+            ]
+        );
     }
 }

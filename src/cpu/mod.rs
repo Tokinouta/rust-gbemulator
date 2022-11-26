@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use crate::{
     mbc::CartridgeHeader,
@@ -68,20 +68,20 @@ pub const STEP_CYCLES: u32 = (STEP_TIME as f64 / (1000_f64 / CLOCK_FREQUENCY as 
 /// The CPU has a fetch-execute cycle, which is simulated by the `cycle` function. It first checks
 /// if there are any interrupts. If interrupts are available, then process them first.
 /// Then fetch an instruction and execute it. And don't forget to increment the pc register.
-struct Cpu {
+pub struct Cpu {
     /// register set
     register: Register,
     /// unified memory interface
-    memory: Memory,
+    memory: Rc<RefCell<dyn MemoryIO>>,
     is_interrupt_enabled: bool,
     is_halted: bool,
 }
 
 impl Cpu {
-    pub fn new(header: CartridgeHeader) -> Self {
+    pub fn new(memory: Rc<RefCell<dyn MemoryIO>>) -> Self {
         Self {
             register: Register::new(),
-            memory: Memory::new(header),
+            memory,
             is_interrupt_enabled: true,
             is_halted: false,
         }
@@ -98,8 +98,8 @@ impl Cpu {
         if !self.is_halted && !self.is_interrupt_enabled {
             return 0;
         }
-        let intf = self.memory.get8(0xff0f);
-        let inte = self.memory.get8(0xffff);
+        let intf = self.memory.borrow().get8(0xff0f);
+        let inte = self.memory.borrow().get8(0xffff);
         let ii = intf & inte;
         if ii == 0x00 {
             return 0;
@@ -113,22 +113,22 @@ impl Cpu {
         // Consume an interrupter, the rest is written back to the register
         let n = ii.trailing_zeros();
         let intf = intf & !(1 << n);
-        self.memory.set8(0xff0f, intf);
+        self.memory.borrow_mut().set8(0xff0f, intf);
 
         self.push(self.register.pc);
         // Set the PC to correspond interrupt process program:
         // V-Blank: 0x40
         // LCD: 0x48
         // TIMER: 0x50
-        // JOYPAD: 0x60
         // Serial: 0x58
+        // JOYPAD: 0x60
         self.register.pc = 0x0040 | ((n as u16) << 3);
         4
     }
 
     /// actually simulating the CPU workflow
     /// interrupt - fetch - execute
-    fn cycle(&mut self) -> u32 {
+    fn tick(&mut self) -> u32 {
         let mac = {
             let c = self.handle_interrupt();
             if c != 0 {
@@ -145,13 +145,13 @@ impl Cpu {
 
 impl Cpu {
     fn fetch8(&mut self) -> u8 {
-        let imm8 = self.memory.get8(self.register.get_pc());
+        let imm8 = self.memory.borrow().get8(self.register.get_pc());
         self.register.pc_inc(1);
         imm8
     }
 
     fn fetch16(&mut self) -> u16 {
-        let imm16 = self.memory.get16(self.register.get_pc());
+        let imm16 = self.memory.borrow().get16(self.register.get_pc());
         self.register.pc_inc(2);
         imm16
     }
@@ -189,7 +189,7 @@ impl Cpu {
             }
             0x36 => {
                 let n = self.fetch8();
-                self.memory.set8(self.register.get_hl(), n)
+                self.memory.borrow_mut().set8(self.register.get_hl(), n)
             }
             0x3e => {
                 let n = self.fetch8();
@@ -274,109 +274,124 @@ impl Cpu {
             // LD from/to memory
             0x0a => self
                 .register
-                .set_a(self.memory.get8(self.register.get_bc())),
+                .set_a(self.memory.borrow().get8(self.register.get_bc())),
             0x1a => self
                 .register
-                .set_a(self.memory.get8(self.register.get_de())),
+                .set_a(self.memory.borrow().get8(self.register.get_de())),
             0x7e => self
                 .register
-                .set_a(self.memory.get8(self.register.get_hl())),
+                .set_a(self.memory.borrow().get8(self.register.get_hl())),
             0x46 => self
                 .register
-                .set_b(self.memory.get8(self.register.get_hl())),
+                .set_b(self.memory.borrow().get8(self.register.get_hl())),
             0x4e => self
                 .register
-                .set_c(self.memory.get8(self.register.get_hl())),
+                .set_c(self.memory.borrow().get8(self.register.get_hl())),
             0x56 => self
                 .register
-                .set_d(self.memory.get8(self.register.get_hl())),
+                .set_d(self.memory.borrow().get8(self.register.get_hl())),
             0x5e => self
                 .register
-                .set_e(self.memory.get8(self.register.get_hl())),
+                .set_e(self.memory.borrow().get8(self.register.get_hl())),
             0x66 => self
                 .register
-                .set_h(self.memory.get8(self.register.get_hl())),
+                .set_h(self.memory.borrow().get8(self.register.get_hl())),
             0x6e => self
                 .register
-                .set_l(self.memory.get8(self.register.get_hl())),
+                .set_l(self.memory.borrow().get8(self.register.get_hl())),
             0x02 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_bc(), self.register.get_a()),
             0x12 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_de(), self.register.get_a()),
             0x70 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_b()),
             0x71 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_c()),
             0x72 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_d()),
             0x73 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_e()),
             0x74 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_h()),
             0x75 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_l()),
             0x77 => self
                 .memory
+                .borrow_mut()
                 .set8(self.register.get_hl(), self.register.get_a()),
 
             0xfa => {
                 let n = self.fetch16();
-                self.register.set_a(self.memory.get8(n))
+                self.register.set_a(self.memory.borrow().get8(n))
             }
             0xea => {
                 let n = self.fetch16();
-                self.memory.set8(n, self.register.get_a())
+                self.memory.borrow_mut().set8(n, self.register.get_a())
             }
 
             // LD A,(C)
-            0xf2 => self
-                .register
-                .set_a(self.memory.get8(0xff00 + self.register.get_c() as u16)),
+            0xf2 => self.register.set_a(
+                self.memory
+                    .borrow()
+                    .get8(0xff00 + self.register.get_c() as u16),
+            ),
             // LD (C),A
             0xe2 => self
                 .memory
+                .borrow_mut()
                 .set8(0xff00 + self.register.get_c() as u16, self.register.get_a()),
             // LDI A,(HL)
             0x2a => {
                 let temp = self.register.get_hl();
-                self.register.set_a(self.memory.get8(temp));
+                self.register.set_a(self.memory.borrow().get8(temp));
                 self.register.set_hl(temp + 1);
             }
             // LDI (HL),A
             0x22 => {
                 let temp = self.register.get_hl();
-                self.memory.set8(temp, self.register.get_a());
+                self.memory.borrow_mut().set8(temp, self.register.get_a());
                 self.register.set_hl(temp + 1);
             }
             // LDD A,(HL)
             0x3a => {
                 let temp = self.register.get_hl();
-                self.register.set_a(self.memory.get8(temp));
+                self.register.set_a(self.memory.borrow().get8(temp));
                 self.register.set_hl(temp - 1);
             }
             // LDD (HL),A
             0x32 => {
                 let temp = self.register.get_hl();
-                self.memory.set8(temp, self.register.get_a());
+                self.memory.borrow_mut().set8(temp, self.register.get_a());
                 self.register.set_hl(temp - 1);
             }
             // LDH (n),A
             0xe0 => {
                 let n = self.fetch8();
-                self.memory.set8(0xff00 + n as u16, self.register.get_a())
+                self.memory
+                    .borrow_mut()
+                    .set8(0xff00 + n as u16, self.register.get_a())
             }
             // LDH A,(n)
             0xf0 => {
                 let n = self.fetch8();
-                self.register.set_a(self.memory.get8(0xff00 + n as u16))
+                self.register
+                    .set_a(self.memory.borrow().get8(0xff00 + n as u16))
             }
 
             // LD SP,HL
@@ -403,7 +418,7 @@ impl Cpu {
             // LD (nn),SP
             0x08 => {
                 let n = self.fetch16();
-                self.memory.set16(self.register.get_sp(), n)
+                self.memory.borrow_mut().set16(self.register.get_sp(), n)
             }
 
             // PUSH nn
@@ -423,7 +438,11 @@ impl Cpu {
             0x83 => self.add8(self.register.get_e()),
             0x84 => self.add8(self.register.get_h()),
             0x85 => self.add8(self.register.get_l()),
-            0x86 => self.add8(self.memory.get8(self.register.get_hl())),
+            0x86 => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.add8(n)
+            }
             0xc6 => {
                 let n = self.fetch8();
                 self.add8(n)
@@ -437,7 +456,11 @@ impl Cpu {
             0x8b => self.adc8(self.register.get_e()),
             0x8c => self.adc8(self.register.get_h()),
             0x8d => self.adc8(self.register.get_l()),
-            0x8e => self.adc8(self.memory.get8(self.register.get_hl())),
+            0x8e => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.adc8(n)
+            }
             0xce => {
                 let n = self.fetch8();
                 self.adc8(n)
@@ -451,7 +474,11 @@ impl Cpu {
             0x93 => self.sub8(self.register.get_e()),
             0x94 => self.sub8(self.register.get_h()),
             0x95 => self.sub8(self.register.get_l()),
-            0x96 => self.sub8(self.memory.get8(self.register.get_hl())),
+            0x96 => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.sub8(n)
+            }
             0xd6 => {
                 let n = self.fetch8();
                 self.sub8(n)
@@ -465,7 +492,11 @@ impl Cpu {
             0x9b => self.sbc8(self.register.get_e()),
             0x9c => self.sbc8(self.register.get_h()),
             0x9d => self.sbc8(self.register.get_l()),
-            0x9e => self.sbc8(self.memory.get8(self.register.get_hl())),
+            0x9e => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.sbc8(n)
+            }
             0xde => {
                 let n = self.fetch8();
                 self.sbc8(n)
@@ -479,7 +510,11 @@ impl Cpu {
             0xa3 => self.and8(self.register.get_e()),
             0xa4 => self.and8(self.register.get_h()),
             0xa5 => self.and8(self.register.get_l()),
-            0xa6 => self.and8(self.memory.get8(self.register.get_hl())),
+            0xa6 => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.and8(n)
+            }
             0xe6 => {
                 let n = self.fetch8();
                 self.and8(n)
@@ -493,7 +528,11 @@ impl Cpu {
             0xb3 => self.or8(self.register.get_e()),
             0xb4 => self.or8(self.register.get_h()),
             0xb5 => self.or8(self.register.get_l()),
-            0xb6 => self.or8(self.memory.get8(self.register.get_hl())),
+            0xb6 => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.or8(n)
+            }
             0xf6 => {
                 let n = self.fetch8();
                 self.or8(n)
@@ -507,7 +546,11 @@ impl Cpu {
             0xab => self.xor8(self.register.get_e()),
             0xac => self.xor8(self.register.get_h()),
             0xad => self.xor8(self.register.get_l()),
-            0xae => self.xor8(self.memory.get8(self.register.get_hl())),
+            0xae => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.xor8(n)
+            }
             0xee => {
                 let n = self.fetch8();
                 self.xor8(n)
@@ -521,7 +564,11 @@ impl Cpu {
             0xbb => self.cp8(self.register.get_e()),
             0xbc => self.cp8(self.register.get_h()),
             0xbd => self.cp8(self.register.get_l()),
-            0xbe => self.cp8(self.memory.get8(self.register.get_hl())),
+            0xbe => {
+                let address = self.register.get_hl();
+                let n = self.memory.borrow().get8(address);
+                self.cp8(n)
+            }
             0xfe => {
                 let n = self.fetch8();
                 self.cp8(n)
@@ -649,9 +696,9 @@ impl Cpu {
                     0x34 => self.register.h = self.swap(self.register.h),
                     0x35 => self.register.l = self.swap(self.register.l),
                     0x36 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.swap(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RLC n
@@ -663,9 +710,9 @@ impl Cpu {
                     0x04 => self.register.h = self.rlc(self.register.h),
                     0x05 => self.register.l = self.rlc(self.register.l),
                     0x06 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.rlc(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RL n
@@ -677,9 +724,9 @@ impl Cpu {
                     0x14 => self.register.h = self.rl(self.register.h),
                     0x15 => self.register.l = self.rl(self.register.l),
                     0x16 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.rl(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RRC n
@@ -691,9 +738,9 @@ impl Cpu {
                     0x0c => self.register.h = self.rrc(self.register.h),
                     0x0d => self.register.l = self.rrc(self.register.l),
                     0x0e => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.rrc(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RR n
@@ -705,9 +752,9 @@ impl Cpu {
                     0x1c => self.register.h = self.rr(self.register.h),
                     0x1d => self.register.l = self.rr(self.register.l),
                     0x1e => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.rr(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SLA n
@@ -719,9 +766,9 @@ impl Cpu {
                     0x24 => self.register.h = self.sl(self.register.h),
                     0x25 => self.register.l = self.sl(self.register.l),
                     0x26 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.sl(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SRA n
@@ -733,9 +780,9 @@ impl Cpu {
                     0x2c => self.register.h = self.sr(self.register.h),
                     0x2d => self.register.l = self.sr(self.register.l),
                     0x2e => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.sr(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SRL n
@@ -747,9 +794,9 @@ impl Cpu {
                     0x3c => self.register.h = self.srl(self.register.h),
                     0x3d => self.register.l = self.srl(self.register.l),
                     0x3e => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.srl(temp);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // BIT 0, r
@@ -761,7 +808,7 @@ impl Cpu {
                     0x44 => self.bit(self.register.h, 0),
                     0x45 => self.bit(self.register.l, 0),
                     0x46 => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 0);
                     }
 
@@ -774,7 +821,7 @@ impl Cpu {
                     0x4c => self.bit(self.register.h, 1),
                     0x4d => self.bit(self.register.l, 1),
                     0x4e => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 1);
                     }
 
@@ -787,7 +834,7 @@ impl Cpu {
                     0x54 => self.bit(self.register.h, 2),
                     0x55 => self.bit(self.register.l, 2),
                     0x56 => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 2);
                     }
 
@@ -800,7 +847,7 @@ impl Cpu {
                     0x5c => self.bit(self.register.h, 3),
                     0x5d => self.bit(self.register.l, 3),
                     0x5e => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 3);
                     }
 
@@ -813,7 +860,7 @@ impl Cpu {
                     0x64 => self.bit(self.register.h, 4),
                     0x65 => self.bit(self.register.l, 4),
                     0x66 => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 4);
                     }
 
@@ -826,7 +873,7 @@ impl Cpu {
                     0x6c => self.bit(self.register.h, 5),
                     0x6d => self.bit(self.register.l, 5),
                     0x6e => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 5);
                     }
 
@@ -839,7 +886,7 @@ impl Cpu {
                     0x74 => self.bit(self.register.h, 6),
                     0x75 => self.bit(self.register.l, 6),
                     0x76 => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 6);
                     }
 
@@ -852,7 +899,7 @@ impl Cpu {
                     0x7c => self.bit(self.register.h, 7),
                     0x7d => self.bit(self.register.l, 7),
                     0x7e => {
-                        let temp = self.memory.get8(self.register.get_hl());
+                        let temp = self.memory.borrow().get8(self.register.get_hl());
                         self.bit(temp, 7);
                     }
 
@@ -865,9 +912,9 @@ impl Cpu {
                     0xc4 => self.register.h = self.set(self.register.h, 0),
                     0xc5 => self.register.l = self.set(self.register.l, 0),
                     0xc6 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 0);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 1, r
@@ -879,9 +926,9 @@ impl Cpu {
                     0xcc => self.register.h = self.set(self.register.h, 1),
                     0xcd => self.register.l = self.set(self.register.l, 1),
                     0xce => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 1);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 2, r
@@ -893,9 +940,9 @@ impl Cpu {
                     0xd4 => self.register.h = self.set(self.register.h, 2),
                     0xd5 => self.register.l = self.set(self.register.l, 2),
                     0xd6 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 2);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 3, r
@@ -907,9 +954,9 @@ impl Cpu {
                     0xdc => self.register.h = self.set(self.register.h, 3),
                     0xdd => self.register.l = self.set(self.register.l, 3),
                     0xde => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 3);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 4, r
@@ -921,9 +968,9 @@ impl Cpu {
                     0xe4 => self.register.h = self.set(self.register.h, 4),
                     0xe5 => self.register.l = self.set(self.register.l, 4),
                     0xe6 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 4);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 5, r
@@ -935,9 +982,9 @@ impl Cpu {
                     0xec => self.register.h = self.set(self.register.h, 5),
                     0xed => self.register.l = self.set(self.register.l, 5),
                     0xee => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 5);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 6, r
@@ -949,9 +996,9 @@ impl Cpu {
                     0xf4 => self.register.h = self.set(self.register.h, 6),
                     0xf5 => self.register.l = self.set(self.register.l, 6),
                     0xf6 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 6);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // SET 7, r
@@ -963,9 +1010,9 @@ impl Cpu {
                     0xfc => self.register.h = self.set(self.register.h, 7),
                     0xfd => self.register.l = self.set(self.register.l, 7),
                     0xfe => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.set(temp, 7);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 0, r
@@ -977,9 +1024,9 @@ impl Cpu {
                     0x84 => self.register.h = self.reset(self.register.h, 0),
                     0x85 => self.register.l = self.reset(self.register.l, 0),
                     0x86 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 0);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 1, r
@@ -991,9 +1038,9 @@ impl Cpu {
                     0x8c => self.register.h = self.reset(self.register.h, 1),
                     0x8d => self.register.l = self.reset(self.register.l, 1),
                     0x8e => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 1);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 2, r
@@ -1005,9 +1052,9 @@ impl Cpu {
                     0x94 => self.register.h = self.reset(self.register.h, 2),
                     0x95 => self.register.l = self.reset(self.register.l, 2),
                     0x96 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 2);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 3, r
@@ -1019,9 +1066,9 @@ impl Cpu {
                     0x9c => self.register.h = self.reset(self.register.h, 3),
                     0x9d => self.register.l = self.reset(self.register.l, 3),
                     0x9e => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 3);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 4, r
@@ -1033,9 +1080,9 @@ impl Cpu {
                     0xa4 => self.register.h = self.reset(self.register.h, 4),
                     0xa5 => self.register.l = self.reset(self.register.l, 4),
                     0xa6 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 4);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 5, r
@@ -1047,9 +1094,9 @@ impl Cpu {
                     0xac => self.register.h = self.reset(self.register.h, 5),
                     0xad => self.register.l = self.reset(self.register.l, 5),
                     0xae => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 5);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 6, r
@@ -1061,9 +1108,9 @@ impl Cpu {
                     0xb4 => self.register.h = self.reset(self.register.h, 6),
                     0xb5 => self.register.l = self.reset(self.register.l, 6),
                     0xb6 => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 6);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     // RES 7, r
@@ -1075,9 +1122,9 @@ impl Cpu {
                     0xbc => self.register.h = self.reset(self.register.h, 7),
                     0xbd => self.register.l = self.reset(self.register.l, 7),
                     0xbe => {
-                        let mut temp = self.memory.get8(self.register.get_hl());
+                        let mut temp = self.memory.borrow().get8(self.register.get_hl());
                         temp = self.reset(temp, 7);
-                        self.memory.set8(self.register.get_hl(), temp);
+                        self.memory.borrow_mut().set8(self.register.get_hl(), temp);
                     }
 
                     _ => (),
@@ -1090,12 +1137,12 @@ impl Cpu {
     }
 
     fn push(&mut self, n: u16) {
-        self.memory.set16(self.register.get_sp(), n);
+        self.memory.borrow_mut().set16(self.register.get_sp(), n);
         self.register.set_sp(self.register.get_sp() - 2)
     }
 
     fn pop(&mut self, opcode: u8) {
-        let address = self.memory.get16(self.register.get_sp());
+        let address = self.memory.borrow().get16(self.register.get_sp());
         match opcode {
             0xf1 => self.register.set_af(address),
             0xc1 => self.register.set_bc(address),
@@ -1287,8 +1334,8 @@ impl Cpu {
             }
             0x34 => {
                 let address = self.register.get_hl();
-                let new_value = self.memory.get8(address).wrapping_add(1);
-                self.memory.set8(address, new_value);
+                let new_value = self.memory.borrow().get8(address).wrapping_add(1);
+                self.memory.borrow_mut().set8(address, new_value);
                 temp = new_value;
             }
             _ => (),
@@ -1332,8 +1379,8 @@ impl Cpu {
             }
             0x35 => {
                 let address = self.register.get_hl();
-                let new_value = self.memory.get8(address).wrapping_sub(1);
-                self.memory.set8(address, new_value);
+                let new_value = self.memory.borrow().get8(address).wrapping_sub(1);
+                self.memory.borrow_mut().set8(address, new_value);
                 temp = new_value;
             }
             _ => (),
@@ -1492,7 +1539,7 @@ impl Cpu {
 
     fn jump_register(&mut self) {
         let reg = self.register.get_hl();
-        let address = self.memory.get16(reg);
+        let address = self.memory.borrow().get16(reg);
         self.register.pc = address;
     }
 
@@ -1515,7 +1562,9 @@ impl Cpu {
 
     fn call(&mut self) {
         let address = self.fetch16();
-        self.memory.set16(self.register.get_sp(), self.register.pc);
+        self.memory
+            .borrow_mut()
+            .set16(self.register.get_sp(), self.register.pc);
         self.register.set_sp(self.register.get_sp() - 2);
         self.register.pc = address;
     }
@@ -1533,13 +1582,15 @@ impl Cpu {
     }
 
     fn restart(&mut self, n: u8) {
-        self.memory.set16(self.register.get_sp(), self.register.pc);
+        self.memory
+            .borrow_mut()
+            .set16(self.register.get_sp(), self.register.pc);
         self.register.set_sp(self.register.get_sp() - 2);
         self.register.pc = n as u16;
     }
 
     fn ret(&mut self) {
-        let address = self.memory.get16(self.register.get_sp());
+        let address = self.memory.borrow().get16(self.register.get_sp());
         self.register.set_sp(self.register.get_sp() + 2);
         self.register.pc = address;
     }
