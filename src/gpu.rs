@@ -2,7 +2,12 @@
 
 // Actually, I lack a lot of necessary knowledge about a computer system, and that is the hardest part which always hampers me from smoothly writing.
 
-use crate::memory::MemoryIO;
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{
+    interrupt::{IntFlag, Interrupt},
+    memory::MemoryIO,
+};
 
 #[derive(Eq, PartialEq)]
 pub enum HdmaMode {
@@ -101,47 +106,71 @@ impl MemoryIO for Hdma {
 
 /// LCDC is the main LCD Control register. Its bits toggle what elements are displayed on the screen, and how.
 struct LcdControl {
-    lcd_control: u8,
+    // lcd_control: u8,
+    pub lcd_and_ppu_enable: bool,
+    pub window_tile_map_area: u8,
+    pub window_enable: bool,
+    pub bg_and_window_tile_data_area: u8,
+    pub bg_tile_map_area: u8,
+    pub obj_size: bool,
+    pub obj_enable: bool,
+    pub bg_and_window_enable: bool,
 }
 
 impl LcdControl {
     pub fn new() -> Self {
-        Self { lcd_control: 0 }
-    }
-
-    fn lcd_and_ppu_enable(&self) -> bool {
-        self.lcd_control & 0x80 != 0
-    }
-    fn window_tile_map_area(&self) -> u8 {
-        (self.lcd_control & 0x40) >> 6
-    }
-    fn window_enable(&self) -> bool {
-        self.lcd_control & 0x20 != 0
-    }
-    fn bg_and_window_tile_data_area(&self) -> u8 {
-        (self.lcd_control & 0x10) >> 4
-    }
-    fn bg_tile_map_area(&self) -> u8 {
-        (self.lcd_control & 0x8) >> 3
-    }
-    fn obj_size(&self) -> bool {
-        self.lcd_control & 0x4 != 0
-    }
-    fn obj_enable(&self) -> bool {
-        self.lcd_control & 0x2 != 0
-    }
-    fn bg_and_window_enable(&self) -> bool {
-        self.lcd_control & 0x1 != 0
+        Self {
+            lcd_and_ppu_enable: true,
+            window_tile_map_area: 0,
+            window_enable: true,
+            bg_and_window_tile_data_area: 0,
+            bg_tile_map_area: 0,
+            obj_size: true,
+            obj_enable: true,
+            bg_and_window_enable: true,
+        }
     }
 }
 
 impl MemoryIO for LcdControl {
     fn get8(&self, _: u16) -> u8 {
-        self.lcd_control
+        let mut res = 0;
+        if self.lcd_and_ppu_enable {
+            res |= 0x80;
+        }
+        if self.window_tile_map_area == 1 {
+            res |= 0x40;
+        }
+        if self.window_enable {
+            res |= 0x20;
+        }
+        if self.bg_and_window_tile_data_area == 1 {
+            res |= 0x10;
+        }
+        if self.bg_tile_map_area == 1 {
+            res |= 0x08;
+        }
+        if self.obj_size {
+            res |= 0x04;
+        }
+        if self.obj_enable {
+            res |= 0x02;
+        }
+        if self.bg_and_window_enable {
+            res |= 0x01;
+        }
+        res
     }
 
     fn set8(&mut self, _: u16, n: u8) {
-        self.lcd_control = n;
+        self.lcd_and_ppu_enable = n & 0x80 != 0;
+        self.window_tile_map_area = (n & 0x40) >> 6;
+        self.window_enable = n & 0x20 != 0;
+        self.bg_and_window_tile_data_area = (n & 0x10) >> 4;
+        self.bg_tile_map_area = (n & 0x08) >> 3;
+        self.obj_size = n & 0x04 != 0;
+        self.obj_enable = n & 0x02 != 0;
+        self.bg_and_window_enable = n & 0x01 != 0;
     }
 
     fn get16(&self, _: u16) -> u16 {
@@ -161,46 +190,57 @@ impl MemoryIO for LcdControl {
 /// - Bit 2 - LYC=LY Flag                          (0=Different, 1=Equal) (Read Only)
 /// - Bit 1-0 - Mode Flag
 struct LcdStatus {
-    data: u8,
+    // data: u8,
+    pub current_line_interrupt: bool,
+    pub is_mode2_interrupt_enabled: bool,
+    pub is_mode1_interrupt_enabled: bool,
+    pub is_mode0_interrupt_enabled: bool,
+    pub current_line_flag: bool,
+    pub mode: u8,
 }
 
 impl LcdStatus {
     pub fn new() -> Self {
-        Self { data: 0 }
-    }
-
-    fn current_line_interrupt(&self) -> bool {
-        self.data | 0x40 != 0
-    }
-
-    fn mode2_interrupt(&self) -> bool {
-        self.data | 0x20 != 0
-    }
-
-    fn mode1_interrupt(&self) -> bool {
-        self.data | 0x10 != 0
-    }
-
-    fn mode0_interrupt(&self) -> bool {
-        self.data | 0x08 != 0
-    }
-
-    fn current_line_flag(&self) -> bool {
-        self.data | 0x04 != 0
-    }
-
-    fn mode(&self) -> u8 {
-        self.data & 0x03
+        Self {
+            current_line_interrupt: true,
+            is_mode2_interrupt_enabled: true,
+            is_mode1_interrupt_enabled: true,
+            is_mode0_interrupt_enabled: true,
+            current_line_flag: true,
+            mode: 0,
+        }
     }
 }
 
 impl MemoryIO for LcdStatus {
     fn get8(&self, _: u16) -> u8 {
-        self.data
+        let mut res = 0;
+        if self.current_line_interrupt {
+            res |= 0x80;
+        }
+        if self.is_mode2_interrupt_enabled {
+            res |= 0x40;
+        }
+        if self.is_mode1_interrupt_enabled {
+            res |= 0x20;
+        }
+        if self.is_mode0_interrupt_enabled {
+            res |= 0x10;
+        }
+        if self.current_line_flag {
+            res |= 0x08;
+        }
+        res |= self.mode;
+        res
     }
 
     fn set8(&mut self, _: u16, n: u8) {
-        self.data = n;
+        self.current_line_interrupt = n & 0x80 != 0;
+        self.is_mode2_interrupt_enabled = n & 0x40 != 0;
+        self.is_mode1_interrupt_enabled = n & 0x20 != 0;
+        self.is_mode0_interrupt_enabled = n & 0x10 != 0;
+        self.current_line_flag = n & 0x08 != 0;
+        self.mode = n & 0x03;
     }
 
     fn get16(&self, _: u16) -> u16 {
@@ -329,8 +369,8 @@ impl ColorPalette {
     pub fn set_color(&mut self, color: (u8, u8, u8)) {
         let mut new = 0u16;
         new |= (color.0 & 0x1f) as u16;
-        new |= ((color.0 & 0x1f) as u16) << 5;
-        new |= ((color.0 & 0x1f) as u16) << 10;
+        new |= ((color.1 & 0x1f) as u16) << 5;
+        new |= ((color.2 & 0x1f) as u16) << 10;
         self.data[self.index] = new;
     }
 }
@@ -400,7 +440,8 @@ pub struct Gpu {
     ram_bank: u8,
     // BGP, OBP0 and OBP1, and BCPS/BGPI, BCPD/BGPD, OCPS/OBPI and OCPD/OBPD (CGB Mode).
     mode: u8,
-    mode_counter: u32,
+    dots: u32,
+    interrupt: Rc<RefCell<Interrupt>>,
 }
 
 impl Gpu {
@@ -421,26 +462,72 @@ impl Gpu {
             obj_palette_1: 0,
 
             mode: 0,
-            mode_counter: 0,
+            dots: 0,
             ram_bank: 0,
             background_palette: ColorPalette::new(),
             object_palette: ColorPalette::new(),
+            interrupt: Rc::new(RefCell::new(Interrupt::new())),
         }
     }
 
-    fn Scanlines(&mut self) {}
+    fn tick(&mut self, cycles: u32) {
+        // 首先检查LCD是不是已经启用了，如果没启用就直接返回。
+        if !self.lcd_control.lcd_and_ppu_enable {
+            return;
+        }
+
+        // 如果向前走0个周期，那么也直接返回。
+        if cycles == 0 {
+            return;
+        }
+
+        if self.lcd_y_coordinate < 144 {
+            if self.dots % 456 < 80 {
+                self.lcd_status.mode = 2;
+            } else if self.dots % 456 >= 80 && self.dots % 456 < (80 + 172) {
+                self.lcd_status.mode = 3;
+            } else if self.dots % 456 >= 80 + 172 {
+                self.lcd_status.mode = 0;
+            }
+        } else {
+            self.lcd_status.mode = 1;
+        }
+        self.change_mode();
+    }
 
     /// 这里主要控制中断，不同模式的中断不一样
-    fn change_mode(&mut self, mode: u8) {
-        match mode {
+    fn change_mode(&mut self) {
+        match self.mode {
             0 => {
-                self.mode = 0;
+                if self.lcd_status.is_mode0_interrupt_enabled {
+                    self.interrupt
+                        .borrow_mut()
+                        .request_interrupt(IntFlag::LCDSTAT);
+                }
+                // Render scanline
+                // if self.term == Term::GBC || self.lcdc.bit0() {
+                //     self.draw_bg();
+                // }
+                // if self.lcdc.bit1() {
+                //     self.draw_sprites();
+                // }
             }
             1 => {
-                self.mode = 1;
+                self.interrupt
+                    .borrow_mut()
+                    .request_interrupt(IntFlag::VBLANK);
+                if self.lcd_status.is_mode1_interrupt_enabled {
+                    self.interrupt
+                        .borrow_mut()
+                        .request_interrupt(IntFlag::LCDSTAT);
+                }
             }
             2 => {
-                self.mode = 2;
+                if self.lcd_status.is_mode2_interrupt_enabled {
+                    self.interrupt
+                        .borrow_mut()
+                        .request_interrupt(IntFlag::LCDSTAT);
+                }
             }
             3 => {
                 self.mode = 3;
