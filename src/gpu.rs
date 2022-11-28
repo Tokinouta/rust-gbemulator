@@ -9,6 +9,9 @@ use crate::{
     memory::MemoryIO,
 };
 
+pub const SCREEN_W: usize = 160;
+pub const SCREEN_H: usize = 144;
+
 #[derive(Eq, PartialEq)]
 pub enum HdmaMode {
     /// When using this transfer method, all data is transferred at once. The execution of the program is halted until
@@ -108,10 +111,10 @@ impl MemoryIO for Hdma {
 struct LcdControl {
     // lcd_control: u8,
     pub lcd_and_ppu_enable: bool,
-    pub window_tile_map_area: u8,
+    pub window_tile_base: u16,
     pub window_enable: bool,
-    pub bg_and_window_tile_data_area: u8,
-    pub bg_tile_map_area: u8,
+    pub bg_and_window_tile_base: u16,
+    pub bg_tile_base: u16,
     pub obj_size: bool,
     pub obj_enable: bool,
     pub bg_and_window_enable: bool,
@@ -121,10 +124,10 @@ impl LcdControl {
     pub fn new() -> Self {
         Self {
             lcd_and_ppu_enable: true,
-            window_tile_map_area: 0,
+            window_tile_base: 0x9800,
             window_enable: true,
-            bg_and_window_tile_data_area: 0,
-            bg_tile_map_area: 0,
+            bg_and_window_tile_base: 0x8000,
+            bg_tile_base: 0x9800,
             obj_size: true,
             obj_enable: true,
             bg_and_window_enable: true,
@@ -138,16 +141,16 @@ impl MemoryIO for LcdControl {
         if self.lcd_and_ppu_enable {
             res |= 0x80;
         }
-        if self.window_tile_map_area == 1 {
+        if self.window_tile_base == 0x9c00 {
             res |= 0x40;
         }
         if self.window_enable {
             res |= 0x20;
         }
-        if self.bg_and_window_tile_data_area == 1 {
+        if self.bg_and_window_tile_base == 0x8000 {
             res |= 0x10;
         }
-        if self.bg_tile_map_area == 1 {
+        if self.bg_tile_base == 0x9c00 {
             res |= 0x08;
         }
         if self.obj_size {
@@ -164,10 +167,10 @@ impl MemoryIO for LcdControl {
 
     fn set8(&mut self, _: u16, n: u8) {
         self.lcd_and_ppu_enable = n & 0x80 != 0;
-        self.window_tile_map_area = (n & 0x40) >> 6;
+        self.window_tile_base = 0x9800 | (((n as u16) & 0x40) >> 6 << 10);
         self.window_enable = n & 0x20 != 0;
-        self.bg_and_window_tile_data_area = (n & 0x10) >> 4;
-        self.bg_tile_map_area = (n & 0x08) >> 3;
+        self.bg_and_window_tile_base = 0x8000 | ((!(n as u16) & 0x10) >> 4 << 11);
+        self.bg_tile_base = 0x9800 | (((n as u16) & 0x08) >> 3 << 10);
         self.obj_size = n & 0x04 != 0;
         self.obj_enable = n & 0x02 != 0;
         self.bg_and_window_enable = n & 0x01 != 0;
@@ -250,6 +253,16 @@ impl MemoryIO for LcdStatus {
     fn set16(&mut self, _: u16, _: u16) {
         unimplemented!()
     }
+}
+
+struct Attributes {
+    /// true for background first, false for sprite first
+    pub priority: bool,
+    pub is_y_flipped: bool,
+    pub is_x_flipped: bool,
+    pub palette_number: u8,
+    pub tile_bank: u8,
+    pub palette_number_cgb: u8,
 }
 
 /// The Game Boy PPU can display up to 40 sprites either in 8x8 or in 8x16 pixels. Because of a limitation of
@@ -533,6 +546,45 @@ impl Gpu {
                 self.mode = 3;
             }
             _ => (),
+        }
+    }
+
+    fn draw_background(&mut self) {
+        let show_window = self.lcd_control.window_enable && self.wndposy <= self.lcd_y_coordinate;
+        let tile_base = self.lcd_control.bg_tile_base;
+
+        let window_x = self.wndposx.wrapping_sub(7);
+        let pixel_y = if show_window {
+            self.lcd_y_coordinate.wrapping_sub(self.wndposy)
+        } else {
+            self.scrolly.wrapping_add(self.lcd_y_coordinate)
+        };
+        let tile_y = (pixel_y as u16 >> 3) & 0x1f;
+
+        // 这里开始按行渲染背景。
+        for x in 0..SCREEN_W {
+            let pixel_x = if show_window && x as u8 >= window_x {
+                x as u8 - window_x
+            } else {
+                self.scrollx.wrapping_add(x as u8)
+            };
+            let tile_x = (pixel_x as u16 >> 3) & 0x1f;
+            let background_base = if show_window && x as u8 > window_x {
+                self.lcd_control.window_tile_base
+            } else {
+                self.lcd_control.bg_tile_base
+            };
+
+            let tile_address = background_base + tile_y * 32 + tile_x;
+            let tile_number = self.get8(tile_address);
+            let tile_offset = if self.lcd_control.bg_and_window_tile_base == 0x8000 {
+                tile_number
+            } else {
+                tile_number.wrapping_add(128)
+            } as u16
+                * 16;
+            let tile_location = tile_base + tile_offset;
+
         }
     }
 }
