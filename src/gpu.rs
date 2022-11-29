@@ -7,6 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     interrupt::{IntFlag, Interrupt},
     memory::MemoryIO,
+    Term,
 };
 
 pub const SCREEN_W: usize = 160;
@@ -255,6 +256,7 @@ impl MemoryIO for LcdStatus {
     }
 }
 
+#[derive(Clone, Copy, Default)]
 struct Attributes {
     /// true for background first, false for sprite first
     pub priority: bool,
@@ -263,6 +265,42 @@ struct Attributes {
     pub palette_number: u8,
     pub tile_bank: u8,
     pub palette_number_cgb: u8,
+}
+
+impl MemoryIO for Attributes {
+    fn get8(&self, _: u16) -> u8 {
+        let mut res = 0;
+        if self.priority {
+            res |= 0x80;
+        }
+        if self.is_y_flipped {
+            res |= 0x40;
+        }
+        if self.is_x_flipped {
+            res |= 0x20;
+        }
+        res |= self.palette_number << 4;
+        res |= self.tile_bank << 3;
+        res |= self.palette_number_cgb & 0x07;
+        res
+    }
+
+    fn set8(&mut self, _: u16, n: u8) {
+        self.priority = n & 0x80 != 0;
+        self.is_y_flipped = n & 0x40 != 0;
+        self.is_x_flipped = n & 0x20 != 0;
+        self.palette_number = (n & 0x10) >> 4;
+        self.tile_bank = (n & 0x08) >> 3;
+        self.palette_number_cgb = n & 0x07;
+    }
+
+    fn get16(&self, _: u16) -> u16 {
+        unimplemented!()
+    }
+
+    fn set16(&mut self, _: u16, _: u16) {
+        unimplemented!()
+    }
 }
 
 /// The Game Boy PPU can display up to 40 sprites either in 8x8 or in 8x16 pixels. Because of a limitation of
@@ -276,34 +314,34 @@ struct OAMEntry {
     y_position: u8,
     x_position: u8,
     tile_index: u8,
-    flags: u8,
+    flags: Attributes,
 }
 
-impl OAMEntry {
-    fn bg_over_obj(&self) -> bool {
-        self.flags & 0x80 != 0
-    }
+// impl OAMEntry {
+//     fn bg_over_obj(&self) -> bool {
+//         self.flags & 0x80 != 0
+//     }
 
-    fn y_flip(&self) -> bool {
-        self.flags & 0x40 != 0
-    }
+//     fn y_flip(&self) -> bool {
+//         self.flags & 0x40 != 0
+//     }
 
-    fn x_flip(&self) -> bool {
-        self.flags & 0x20 != 0
-    }
+//     fn x_flip(&self) -> bool {
+//         self.flags & 0x20 != 0
+//     }
 
-    fn palette_number(&self) -> u8 {
-        (self.flags & 0x10) >> 4
-    }
+//     fn palette_number(&self) -> u8 {
+//         (self.flags & 0x10) >> 4
+//     }
 
-    fn vram_bank(&self) -> u8 {
-        (self.flags & 0x08) >> 3
-    }
+//     fn vram_bank(&self) -> u8 {
+//         (self.flags & 0x08) >> 3
+//     }
 
-    fn palette_number_cgb(&self) -> u8 {
-        self.flags & 0x07
-    }
-}
+//     fn palette_number_cgb(&self) -> u8 {
+//         self.flags & 0x07
+//     }
+// }
 
 impl MemoryIO for OAMEntry {
     fn get8(&self, address: u16) -> u8 {
@@ -311,7 +349,7 @@ impl MemoryIO for OAMEntry {
             0x00 => self.y_position,
             0x01 => self.x_position,
             0x02 => self.tile_index,
-            0x03 => self.flags,
+            0x03 => self.flags.get8(address),
             _ => unimplemented!(),
         }
     }
@@ -321,7 +359,7 @@ impl MemoryIO for OAMEntry {
             0x00 => self.y_position = n,
             0x01 => self.x_position = n,
             0x02 => self.tile_index = n,
-            0x03 => self.flags = n,
+            0x03 => self.flags.set8(address, n),
             _ => unimplemented!(),
         }
     }
@@ -372,10 +410,10 @@ impl ColorPalette {
         }
     }
 
-    pub fn get_color(&self) -> (u8, u8, u8) {
-        let r = self.data[self.index] & 0x1f;
-        let g = self.data[self.index] & 0x3e;
-        let b = self.data[self.index] & 0x7c;
+    pub fn get_color(&self, index: u8) -> (u8, u8, u8) {
+        let r = self.data[index as usize] & 0x1f;
+        let g = self.data[index as usize] & 0x3e;
+        let b = self.data[index as usize] & 0x7c;
         (r as u8, g as u8, b as u8)
     }
 
@@ -433,6 +471,7 @@ impl MemoryIO for ColorPalette {
 }
 
 pub struct Gpu {
+    term: Term,
     vram: [u8; 0x4000],
     oam: [OAMEntry; 40],
     scrollx: u8,
@@ -453,13 +492,17 @@ pub struct Gpu {
     ram_bank: u8,
     // BGP, OBP0 and OBP1, and BCPS/BGPI, BCPD/BGPD, OCPS/OBPI and OCPD/OBPD (CGB Mode).
     mode: u8,
+    prio: [(bool, usize); SCREEN_W],
     dots: u32,
     interrupt: Rc<RefCell<Interrupt>>,
+
+    pub data: [[[u8; 3]; SCREEN_W]; SCREEN_H],
 }
 
 impl Gpu {
     pub fn new() -> Self {
         Self {
+            term: Term::GB,
             vram: [0; 0x4000],
             oam: [OAMEntry::default(); 40],
             scrollx: 0,
@@ -475,12 +518,48 @@ impl Gpu {
             obj_palette_1: 0,
 
             mode: 0,
+            prio: [(true, 0); SCREEN_W],
             dots: 0,
             ram_bank: 0,
             background_palette: ColorPalette::new(),
             object_palette: ColorPalette::new(),
             interrupt: Rc::new(RefCell::new(Interrupt::new())),
+
+            data: [[[0xffu8; 3]; SCREEN_W]; SCREEN_H],
         }
+    }
+
+    // Grey scale.
+    fn set_gre(&mut self, x: usize, color: u8) {
+        let g = match self.bg_palette_data >> (2 * color) & 0x03 {
+            0x00 => 0xff,
+            0x01 => 0xc0,
+            0x02 => 0x60,
+            0x03 => 0x00,
+            _ => 0,
+        };
+        self.data[self.lcd_y_coordinate as usize][x] = [g, g, g];
+    }
+
+    // When developing graphics on PCs, note that the RGB values will have different appearance on CGB displays as on
+    // VGA/HDMI monitors calibrated to sRGB color. Because the GBC is not lit, the highest intensity will produce Light
+    // Gray color rather than White. The intensities are not linear; the values 10h-1Fh will all appear very bright,
+    // while medium and darker colors are ranged at 00h-0Fh.
+    // The CGB display's pigments aren't perfectly saturated. This means the colors mix quite oddly; increasing
+    // intensity of only one R,G,B color will also influence the other two R,G,B colors. For example, a color setting
+    // of 03EFh (Blue=0, Green=1Fh, Red=0Fh) will appear as Neon Green on VGA displays, but on the CGB it'll produce a
+    // decently washed out Yellow. See image on the right.
+    fn set_rgb(&mut self, x: usize, r: u8, g: u8, b: u8) {
+        assert!(r <= 0x1f);
+        assert!(g <= 0x1f);
+        assert!(b <= 0x1f);
+        let r = u32::from(r);
+        let g = u32::from(g);
+        let b = u32::from(b);
+        let lr = ((r * 13 + g * 2 + b) >> 1) as u8;
+        let lg = ((g * 3 + b) << 1) as u8;
+        let lb = ((r * 3 + g * 2 + b * 11) >> 1) as u8;
+        self.data[self.lcd_y_coordinate as usize][x] = [lr, lg, lb];
     }
 
     fn tick(&mut self, cycles: u32) {
@@ -551,7 +630,7 @@ impl Gpu {
 
     fn draw_background(&mut self) {
         let show_window = self.lcd_control.window_enable && self.wndposy <= self.lcd_y_coordinate;
-        let tile_base = self.lcd_control.bg_tile_base;
+        let tile_base = self.lcd_control.bg_and_window_tile_base;
 
         let window_x = self.wndposx.wrapping_sub(7);
         let pixel_y = if show_window {
@@ -575,6 +654,9 @@ impl Gpu {
                 self.lcd_control.bg_tile_base
             };
 
+            // 这里找的是tile的映射，他指出整个背景上每一个tile应该用哪一个图案。
+            // 它的内存空间不是具体存tile图案的地方，而是存具体显示什么的地方。
+            // 根据tile的编号找到当前应该用哪一个图案，可以看出来每一个条目存的是这个tile应该用的图案的编号。
             let tile_address = background_base + tile_y * 32 + tile_x;
             let tile_number = self.get8(tile_address);
             let tile_offset = if self.lcd_control.bg_and_window_tile_base == 0x8000 {
@@ -584,7 +666,62 @@ impl Gpu {
             } as u16
                 * 16;
             let tile_location = tile_base + tile_offset;
+            // 这个tile的attribute只有CGB模式才会有。但是，在代码实现时，vram数组初始化一定是全零
+            // 所以得到的东西是0，也就没有啥影响了。
+            let mut tile_attribute = Attributes::default();
+            tile_attribute.set8(0, self.vram[tile_address as usize - 0x6000]);
 
+            let tile_y = if tile_attribute.is_y_flipped {
+                7 - pixel_y % 8
+            } else {
+                pixel_y % 8
+            };
+            let tile_y_data = if self.term == Term::GBC {
+                let a = self.vram[(tile_location
+                    + tile_y as u16 * 2
+                    + (tile_attribute.tile_bank as u16)
+                    << 13) as usize
+                    - 0x8000];
+                let b = self.vram[(tile_location
+                    + tile_y as u16 * 2
+                    + (tile_attribute.tile_bank as u16)
+                    << 13) as usize
+                    - 0x8000
+                    + 1];
+                (a, b)
+            } else {
+                let a = self.vram[(tile_location + tile_y as u16 * 2) as usize - 0x8000];
+                let b = self.vram[(tile_location + tile_y as u16 * 2) as usize - 0x8000 + 1];
+                (a, b)
+            };
+            let tile_x = if tile_attribute.is_x_flipped {
+                7 - pixel_x % 8
+            } else {
+                pixel_x % 8
+            };
+
+            let color_l = if tile_y_data.0 & (0x80 >> tile_x) != 0 {
+                1
+            } else {
+                0
+            };
+            let color_r = if tile_y_data.1 & (0x80 >> tile_x) != 0 {
+                2
+            } else {
+                0
+            };
+            let color: u8 = color_l | color_r;
+
+            self.prio[x] = (tile_attribute.priority, color as usize);
+
+            if self.term == Term::GBC {
+                let (r, g, b) = self
+                    .background_palette
+                    .get_color(tile_attribute.palette_number_cgb * 4 + color);
+                self.set_rgb(x, r, g, b);
+            } else {
+                self.set_gre(x, color);
+            }
         }
     }
 }
