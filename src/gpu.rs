@@ -311,10 +311,10 @@ impl MemoryIO for Attributes {
 /// of the 40 entries consists of four bytes.
 #[derive(Clone, Copy, Default)]
 struct OAMEntry {
-    y_position: u8,
-    x_position: u8,
-    tile_index: u8,
-    flags: Attributes,
+    pub y_position: u8,
+    pub x_position: u8,
+    pub tile_index: u8,
+    pub flags: Attributes,
 }
 
 // impl OAMEntry {
@@ -530,8 +530,8 @@ impl Gpu {
     }
 
     // Grey scale.
-    fn set_gre(&mut self, x: usize, color: u8) {
-        let g = match self.bg_palette_data >> (2 * color) & 0x03 {
+    fn set_gre(&mut self, x: usize, color: u8, palette_data: u8) {
+        let g = match palette_data >> (2 * color) & 0x03 {
             0x00 => 0xff,
             0x01 => 0xc0,
             0x02 => 0x60,
@@ -638,15 +638,17 @@ impl Gpu {
         } else {
             self.scrolly.wrapping_add(self.lcd_y_coordinate)
         };
+        // 一列中的第几个tile
         let tile_y = (pixel_y as u16 >> 3) & 0x1f;
 
-        // 这里开始按行渲染背景。
+        // 这里开始按行渲染背景。x是当前行的第x个像素
         for x in 0..SCREEN_W {
             let pixel_x = if show_window && x as u8 >= window_x {
                 x as u8 - window_x
             } else {
                 self.scrollx.wrapping_add(x as u8)
             };
+            // 一行中的第几个tile
             let tile_x = (pixel_x as u16 >> 3) & 0x1f;
             let background_base = if show_window && x as u8 > window_x {
                 self.lcd_control.window_tile_base
@@ -671,6 +673,7 @@ impl Gpu {
             let mut tile_attribute = Attributes::default();
             tile_attribute.set8(0, self.vram[tile_address as usize - 0x6000]);
 
+            // tile的第几个像素
             let tile_y = if tile_attribute.is_y_flipped {
                 7 - pixel_y % 8
             } else {
@@ -712,6 +715,7 @@ impl Gpu {
             };
             let color: u8 = color_l | color_r;
 
+            // 存储当前行中每一个像素是背景优先还是sprite优先，以及颜色
             self.prio[x] = (tile_attribute.priority, color as usize);
 
             if self.term == Term::GBC {
@@ -720,7 +724,116 @@ impl Gpu {
                     .get_color(tile_attribute.palette_number_cgb * 4 + color);
                 self.set_rgb(x, r, g, b);
             } else {
-                self.set_gre(x, color);
+                self.set_gre(x, color, self.bg_palette_data);
+            }
+        }
+    }
+
+    fn draw_sprites(&mut self) {
+        // sprite的纵向像素数
+        let sprite_size = if self.lcd_control.obj_size { 16 } else { 8 };
+        // 一共有40个sprite，每一个都需要执行一次这个操作
+        for i in 0..40 {
+            let mut sprite = self.oam[i];
+            sprite.tile_index &= if self.lcd_control.obj_size {
+                0xfe
+            } else {
+                0xff
+            };
+
+            // 内层的if判断的是当前关注的行是否穿过了sprite
+            if sprite.y_position <= 0xff - sprite_size + 1 {
+                // 当前sprite完全在background范围内
+                if self.lcd_y_coordinate < sprite.y_position
+                    || self.lcd_y_coordinate > sprite.y_position + sprite_size - 1
+                {
+                    continue;
+                }
+            } else {
+                // 有一部分在background范围外
+                if self.lcd_y_coordinate > sprite.y_position.wrapping_add(sprite_size) - 1 {
+                    continue;
+                }
+            }
+
+            // 通过当前纵坐标和sprite的纵坐标的差来确定当前是tile中第几个纵向像素
+            let tile_y = if sprite.flags.is_y_flipped {
+                sprite_size - 1 - self.lcd_y_coordinate.wrapping_sub(sprite.y_position)
+            } else {
+                self.lcd_y_coordinate.wrapping_sub(sprite.y_position)
+            };
+            let tile_location = 0x8000 + sprite.tile_index as u16 * 16 + tile_y as u16 * 2;
+            let tile_y_data = if self.term == Term::GBC {
+                let a =
+                    self.vram[(tile_location + tile_y as u16 * 2 + (sprite.flags.tile_bank as u16)
+                        << 13) as usize
+                        - 0x8000];
+                let b =
+                    self.vram[(tile_location + tile_y as u16 * 2 + (sprite.flags.tile_bank as u16)
+                        << 13) as usize
+                        - 0x8000
+                        + 1];
+                (a, b)
+            } else {
+                let a = self.vram[(tile_location + tile_y as u16 * 2) as usize - 0x8000];
+                let b = self.vram[(tile_location + tile_y as u16 * 2) as usize - 0x8000 + 1];
+                (a, b)
+            };
+
+            for x in 0..8 {
+                if sprite.x_position as usize + x as usize > SCREEN_W {
+                    continue;
+                }
+                let tile_x = if sprite.flags.is_x_flipped { 7 - x } else { x };
+                let color_l = if tile_y_data.0 & (0x80 >> tile_x) != 0 {
+                    1
+                } else {
+                    0
+                };
+                let color_r = if tile_y_data.1 & (0x80 >> tile_x) != 0 {
+                    2
+                } else {
+                    0
+                };
+                let color: u8 = color_l | color_r;
+
+                // 存储当前行中每一个像素是背景优先还是sprite优先，以及颜色
+                let prio = self.prio[x];
+                let skip = if self.term == Term::GBC && !self.lcd_control.bg_and_window_enable {
+                    // 如果没有使能背景，那么背景是黑色像素时跳过
+                    // 我感觉这里其实不跳也无所谓
+                    prio.1 == 0
+                } else if prio.0 || sprite.flags.priority {
+                    // 如果背景优先，那么背景不是黑色像素时跳过
+                    prio.1 != 0
+                } else {
+                    // 不跳过
+                    false
+                };
+                if skip {
+                    continue;
+                }
+
+                if self.term == Term::GBC {
+                    let (r, g, b) = self
+                        .background_palette
+                        .get_color(sprite.flags.palette_number_cgb * 4 + color);
+                    self.set_rgb(sprite.x_position.wrapping_add(x as u8) as usize, r, g, b);
+                } else {
+                    if sprite.flags.palette_number == 0 {
+                        self.set_gre(
+                            sprite.x_position.wrapping_add(x as u8) as usize,
+                            color,
+                            self.obj_palette_0,
+                        );
+                    } else {
+                        self.set_gre(
+                            sprite.x_position.wrapping_add(x as u8) as usize,
+                            color,
+                            self.obj_palette_1,
+                        );
+                    }
+                }
             }
         }
     }
