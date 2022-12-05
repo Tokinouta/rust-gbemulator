@@ -178,13 +178,14 @@ impl MemoryIO for LcdControl {
     }
 
     fn get16(&self, _: u16) -> u16 {
-        unimplemented!()
+        unimplemented!("LCD control register doesn't support reading 2-byte data.")
     }
 
     fn set16(&mut self, _: u16, _: u16) {
-        unimplemented!()
+        unimplemented!("LCD control register doesn't support writing 2-byte data.")
     }
 }
+
 /// LCD Status
 ///
 /// - LYC=LY STAT Interrupt source         (1=Enable) (Read/Write)
@@ -248,11 +249,11 @@ impl MemoryIO for LcdStatus {
     }
 
     fn get16(&self, _: u16) -> u16 {
-        unimplemented!()
+        unimplemented!("LCD status register doesn't support reading 2-byte data.")
     }
 
     fn set16(&mut self, _: u16, _: u16) {
-        unimplemented!()
+        unimplemented!("LCD status register doesn't support writing 2-byte data.")
     }
 }
 
@@ -295,11 +296,11 @@ impl MemoryIO for Attributes {
     }
 
     fn get16(&self, _: u16) -> u16 {
-        unimplemented!()
+        unimplemented!("Tile map attribute doesn't support reading 2-byte data.")
     }
 
     fn set16(&mut self, _: u16, _: u16) {
-        unimplemented!()
+        unimplemented!("Tile map attribute doesn't support writing 2-byte data.")
     }
 }
 
@@ -316,32 +317,6 @@ struct OAMEntry {
     pub tile_index: u8,
     pub flags: Attributes,
 }
-
-// impl OAMEntry {
-//     fn bg_over_obj(&self) -> bool {
-//         self.flags & 0x80 != 0
-//     }
-
-//     fn y_flip(&self) -> bool {
-//         self.flags & 0x40 != 0
-//     }
-
-//     fn x_flip(&self) -> bool {
-//         self.flags & 0x20 != 0
-//     }
-
-//     fn palette_number(&self) -> u8 {
-//         (self.flags & 0x10) >> 4
-//     }
-
-//     fn vram_bank(&self) -> u8 {
-//         (self.flags & 0x08) >> 3
-//     }
-
-//     fn palette_number_cgb(&self) -> u8 {
-//         self.flags & 0x07
-//     }
-// }
 
 impl MemoryIO for OAMEntry {
     fn get8(&self, address: u16) -> u8 {
@@ -365,11 +340,11 @@ impl MemoryIO for OAMEntry {
     }
 
     fn get16(&self, _: u16) -> u16 {
-        unimplemented!()
+        unimplemented!("OAM doesn't support reading 2-byte data.")
     }
 
     fn set16(&mut self, _: u16, _: u16) {
-        unimplemented!()
+        unimplemented!("OAM doesn't support writing 2-byte data.")
     }
 }
 
@@ -382,12 +357,12 @@ impl MemoryIO for [OAMEntry] {
         self[(address - 0xfe00) as usize >> 2].set8(address, n);
     }
 
-    fn get16(&self, address: u16) -> u16 {
-        unimplemented!()
+    fn get16(&self, _: u16) -> u16 {
+        unimplemented!("OAM doesn't support reading 2-byte data.")
     }
 
-    fn set16(&mut self, address: u16, n: u16) {
-        unimplemented!()
+    fn set16(&mut self, _: u16, _: u16) {
+        unimplemented!("OAM doesn't support writing 2-byte data.")
     }
 }
 
@@ -462,11 +437,11 @@ impl MemoryIO for ColorPalette {
     }
 
     fn get16(&self, _: u16) -> u16 {
-        unimplemented!()
+        unimplemented!("Color palette doesn't support reading 2-byte data.")
     }
 
     fn set16(&mut self, _: u16, _: u16) {
-        unimplemented!()
+        unimplemented!("Color palette doesn't support writing 2-byte data.")
     }
 }
 
@@ -483,16 +458,21 @@ pub struct Gpu {
     lcd_y_coordinate: u8,
     ly_compare: u8,
 
-    bg_palette_data: u8,
-    obj_palette_0: u8,
-    obj_palette_1: u8,
+    // 这三个寄存器是用于黑白模式的GameBoy
+    bg_palette_data: u8, // 背景调色板
+    obj_palette_0: u8,   // 对象调色板0
+    obj_palette_1: u8,   // 对象调色板1
 
+    // 这两个是用于彩色GameBoy的调色板数据
     background_palette: ColorPalette,
     object_palette: ColorPalette,
+
     ram_bank: u8,
     // BGP, OBP0 and OBP1, and BCPS/BGPI, BCPD/BGPD, OCPS/OBPI and OCPD/OBPD (CGB Mode).
     mode: u8,
     prio: [(bool, usize); SCREEN_W],
+
+    /// 1 dots 是1/4.19M秒。
     dots: u32,
     interrupt: Rc<RefCell<Interrupt>>,
 
@@ -562,6 +542,9 @@ impl Gpu {
         self.data[self.lcd_y_coordinate as usize][x] = [lr, lg, lb];
     }
 
+    /// 往前走若干个始终周期
+    ///
+    /// cycles：周期数
     fn tick(&mut self, cycles: u32) {
         // 首先检查LCD是不是已经启用了，如果没启用就直接返回。
         if !self.lcd_control.lcd_and_ppu_enable {
@@ -573,6 +556,31 @@ impl Gpu {
             return;
         }
 
+        // 因为四个模式中最短的是80 dots，因此用80的倍数向前走可以提高模拟效率
+        let c = (cycles - 1) / 80 + 1; // 项上取整
+        for i in 0..c {
+            if i == c - 1 {
+                self.dots += cycles & 80;
+            } else {
+                self.dots += 80;
+            }
+
+            if self.dots != self.dots % 456 {
+                self.lcd_y_coordinate = (self.lcd_y_coordinate + 1) % 154;
+                if self.lcd_status.current_line_interrupt
+                    && self.lcd_y_coordinate == self.ly_compare
+                {
+                    self.interrupt
+                        .borrow_mut()
+                        .request_interrupt(IntFlag::LCDSTAT);
+                }
+            }
+            self.change_mode();
+        }
+    }
+
+    /// 这里主要控制中断，不同模式的中断不一样
+    fn change_mode(&mut self) {
         if self.lcd_y_coordinate < 144 {
             if self.dots % 456 < 80 {
                 self.lcd_status.mode = 2;
@@ -584,11 +592,7 @@ impl Gpu {
         } else {
             self.lcd_status.mode = 1;
         }
-        self.change_mode();
-    }
 
-    /// 这里主要控制中断，不同模式的中断不一样
-    fn change_mode(&mut self) {
         match self.mode {
             0 => {
                 if self.lcd_status.is_mode0_interrupt_enabled {
@@ -597,12 +601,12 @@ impl Gpu {
                         .request_interrupt(IntFlag::LCDSTAT);
                 }
                 // Render scanline
-                // if self.term == Term::GBC || self.lcdc.bit0() {
-                //     self.draw_bg();
-                // }
-                // if self.lcdc.bit1() {
-                //     self.draw_sprites();
-                // }
+                if self.term == Term::GBC || self.lcd_control.bg_and_window_enable {
+                    self.draw_background();
+                }
+                if self.lcd_control.obj_enable {
+                    self.draw_sprites();
+                }
             }
             1 => {
                 self.interrupt
@@ -869,7 +873,16 @@ impl MemoryIO for Gpu {
 
     fn set8(&mut self, address: u16, n: u8) {
         match address {
-            0xff40 => self.lcd_control.set8(address, n),
+            0xff40 => {
+                self.lcd_control.set8(address, n);
+                if !self.lcd_control.lcd_and_ppu_enable {
+                    self.dots = 0;
+                    self.lcd_y_coordinate = 0;
+                    self.lcd_status.mode = 0;
+                    // Clean screen.
+                    self.data = [[[0xffu8; 3]; SCREEN_W]; SCREEN_H];
+                }
+            }
             0xff41 => self.lcd_status.set8(address, n),
             0xff42 => self.scrolly = n,
             0xff43 => self.scrollx = n,
